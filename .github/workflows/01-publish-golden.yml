@@ -1,0 +1,44 @@
+# Customer talking point: publish the approved golden base (Foo) with Build Info
+# and golden-base Evidence — the catalog termination set for lineage.
+name: 01 Publish golden
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Run id shared across demo beats (default = github.run_id)
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish-golden:
+    runs-on: ubuntu-latest
+    env:
+      JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+      EVIDENCE_SIGNING_KEY: ${{ secrets.EVIDENCE_SIGNING_KEY }}
+      JF_URL: ${{ vars.JF_URL || 'https://tomjpd2.jfrog.io' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup lab
+        uses: ./.github/actions/setup-lab
+        with:
+          run_id: ${{ inputs.run_id }}
+          jf_url: ${{ env.JF_URL }}
+          oidc_provider_name: ${{ secrets.OIDC_PROVIDER_NAME }}
+          oidc_audience: ${{ secrets.OIDC_AUDIENCE }}
+
+      - name: Publish golden (Foo)
+        run: ./lab/scripts/steps/publish-golden.sh
+
+      - name: Upload run artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lineage-run-${{ env.RUN_ID }}
+          path: lab/out/${{ env.RUN_ID }}/
+          if-no-files-found: warn

@@ -1,0 +1,50 @@
+# Customer talking point: dry-run promote into dockerlineage-PreProd entry —
+# payments-api with lineage Evidence PASSES; rogue-api without FAIL/blocks.
+name: 08 AppTrust gate verify
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Optional run id for logging
+        required: false
+        type: string
+        default: ""
+      app_version:
+        description: AppTrust version for payments-api (must exist from 07)
+        required: false
+        type: string
+        default: "2.0.0"
+      neg_app_version:
+        description: AppTrust version for rogue-api (must exist from 07)
+        required: false
+        type: string
+        default: "1.0.0"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  gate-verify:
+    runs-on: ubuntu-latest
+    env:
+      JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+      EVIDENCE_SIGNING_KEY: ${{ secrets.EVIDENCE_SIGNING_KEY }}
+      JF_URL: ${{ vars.JF_URL || 'https://tomjpd2.jfrog.io' }}
+      APP_VERSION: ${{ inputs.app_version }}
+      NEG_APP_VERSION: ${{ inputs.neg_app_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup lab
+        uses: ./.github/actions/setup-lab
+        with:
+          run_id: ${{ inputs.run_id }}
+          jf_url: ${{ env.JF_URL }}
+          oidc_provider_name: ${{ secrets.OIDC_PROVIDER_NAME }}
+          oidc_audience: ${{ secrets.OIDC_AUDIENCE }}
+          write_evidence_key: "false"
+
+      - name: Verify PreProd entry gate (pass + fail)
+        run: ./lab/scripts/steps/gate-verify.sh

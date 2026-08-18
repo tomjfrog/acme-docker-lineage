@@ -1,0 +1,6 @@
+lab/keys/
+lab/out/
+*.key
+*.pub
+.DS_Store
+.github/act/secrets

@@ -1,0 +1,51 @@
+# Customer talking point: rename without CI cooperation — same digests/layers,
+# no Evidence on the new name; Tier 2 layer matching still finds golden.
+name: 04 Rename without CI metadata
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Run id shared with prior publish beats
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish-rename:
+    runs-on: ubuntu-latest
+    env:
+      JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+      EVIDENCE_SIGNING_KEY: ${{ secrets.EVIDENCE_SIGNING_KEY }}
+      JF_URL: ${{ vars.JF_URL || 'https://tomjpd2.jfrog.io' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download prior run artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: lineage-run-${{ inputs.run_id }}
+          path: lab/out/${{ inputs.run_id }}/
+        continue-on-error: true
+
+      - name: Setup lab
+        uses: ./.github/actions/setup-lab
+        with:
+          run_id: ${{ inputs.run_id }}
+          jf_url: ${{ env.JF_URL }}
+          oidc_provider_name: ${{ secrets.OIDC_PROVIDER_NAME }}
+          oidc_audience: ${{ secrets.OIDC_AUDIENCE }}
+          write_evidence_key: "false"
+
+      - name: Rename Bar → billing-service (no Evidence)
+        run: ./lab/scripts/steps/publish-rename.sh
+
+      - name: Upload run artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lineage-run-${{ env.RUN_ID }}
+          path: lab/out/${{ env.RUN_ID }}/
+          if-no-files-found: warn

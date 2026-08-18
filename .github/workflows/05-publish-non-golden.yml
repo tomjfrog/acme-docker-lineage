@@ -1,0 +1,53 @@
+# Customer talking point: negative control — debian-based rogue-api is not
+# derived from the golden catalog (no layer prefix, no lineage Evidence).
+name: 05 Publish non-golden
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Run id shared across demo beats
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish-nongolden:
+    runs-on: ubuntu-latest
+    env:
+      JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+      EVIDENCE_SIGNING_KEY: ${{ secrets.EVIDENCE_SIGNING_KEY }}
+      JF_URL: ${{ vars.JF_URL || 'https://tomjpd2.jfrog.io' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download prior run artifacts
+        if: inputs.run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: lineage-run-${{ inputs.run_id }}
+          path: lab/out/${{ inputs.run_id }}/
+        continue-on-error: true
+
+      - name: Setup lab
+        uses: ./.github/actions/setup-lab
+        with:
+          run_id: ${{ inputs.run_id }}
+          jf_url: ${{ env.JF_URL }}
+          oidc_provider_name: ${{ secrets.OIDC_PROVIDER_NAME }}
+          oidc_audience: ${{ secrets.OIDC_AUDIENCE }}
+          write_evidence_key: "false"
+
+      - name: Publish rogue-api
+        run: ./lab/scripts/steps/publish-nongolden.sh
+
+      - name: Upload run artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lineage-run-${{ env.RUN_ID }}
+          path: lab/out/${{ env.RUN_ID }}/
+          if-no-files-found: warn

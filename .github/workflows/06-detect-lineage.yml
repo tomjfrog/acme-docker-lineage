@@ -1,0 +1,82 @@
+# Customer talking point: forensic + Evidence detector — layer DiffID prefix,
+# Evidence walk to golden, Build Info join (Tier 1+2 verdicts).
+name: 06 Detect lineage
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Run id whose lab/out artifacts to analyze (optional if detector can rebuild locally)
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    env:
+      JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+      EVIDENCE_SIGNING_KEY: ${{ secrets.EVIDENCE_SIGNING_KEY }}
+      JF_URL: ${{ vars.JF_URL || 'https://tomjpd2.jfrog.io' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download prior run artifacts
+        if: inputs.run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: lineage-run-${{ inputs.run_id }}
+          path: lab/out/${{ inputs.run_id }}/
+        continue-on-error: true
+
+      - name: Setup lab
+        uses: ./.github/actions/setup-lab
+        with:
+          run_id: ${{ inputs.run_id }}
+          jf_url: ${{ env.JF_URL }}
+          oidc_provider_name: ${{ secrets.OIDC_PROVIDER_NAME }}
+          oidc_audience: ${{ secrets.OIDC_AUDIENCE }}
+          write_evidence_key: "false"
+
+      - name: Pull images for layer DiffID matching
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          source ./lab/scripts/lib.sh
+          for img in "${GOLDEN_IMAGE}" "${APP_IMAGE}" "${GRANDCHILD_IMAGE}" "${APP_RENAMED_IMAGE}" "${NON_GOLDEN_IMAGE}"; do
+            docker pull "${img}" || true
+          done
+          RID="${RUN_ID}"
+          RDIR="${OUT_DIR}/${RID}"
+          mkdir -p "${RDIR}"
+          echo "${RID}" > "${OUT_DIR}/latest-run.txt"
+          write_layers_file "${GOLDEN_IMAGE}" "${RDIR}/golden.layers.txt" || true
+          write_layers_file "${APP_IMAGE}" "${RDIR}/app.layers.txt" || true
+          write_layers_file "${GRANDCHILD_IMAGE}" "${RDIR}/grandchild.layers.txt" || true
+          write_layers_file "${APP_RENAMED_IMAGE}" "${RDIR}/app-renamed.layers.txt" || true
+          write_layers_file "${NON_GOLDEN_IMAGE}" "${RDIR}/non-golden.layers.txt" || true
+          image_digest "${GOLDEN_IMAGE}" > "${RDIR}/golden.digest.txt" || true
+          image_digest "${APP_IMAGE}" > "${RDIR}/app.digest.txt" || true
+          image_digest "${GRANDCHILD_IMAGE}" > "${RDIR}/grandchild.digest.txt" || true
+          image_digest "${APP_RENAMED_IMAGE}" > "${RDIR}/app-renamed.digest.txt" || true
+          image_digest "${NON_GOLDEN_IMAGE}" > "${RDIR}/non-golden.digest.txt" || true
+          printf '%s\n' "${GOLDEN_IMAGE}" > "${RDIR}/golden.ref.txt"
+          printf '%s\n' "${APP_IMAGE}" > "${RDIR}/app.ref.txt"
+          printf '%s\n' "${GRANDCHILD_IMAGE}" > "${RDIR}/grandchild.ref.txt"
+          printf '%s\n' "${APP_RENAMED_IMAGE}" > "${RDIR}/app-renamed.ref.txt"
+          printf '%s\n' "${NON_GOLDEN_IMAGE}" > "${RDIR}/non-golden.ref.txt"
+      - name: Detect lineage
+        run: ./lab/scripts/02-detect-lineage.sh "${RUN_ID}"
+
+      - name: Upload detector report
+        uses: actions/upload-artifact@v4
+        with:
+          name: lineage-report-${{ env.RUN_ID }}
+          path: |
+            lab/out/${{ env.RUN_ID }}/lineage-report.md
+            lab/out/${{ env.RUN_ID }}/lineage-results.json
+          if-no-files-found: warn

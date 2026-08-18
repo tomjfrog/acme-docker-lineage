@@ -1,0 +1,97 @@
+name: Setup lineage lab
+description: >-
+  Configure JFrog CLI (OIDC on GitHub.com, or JF_ACCESS_TOKEN for act),
+  restore Evidence signing key, and docker-login to the lab registry.
+inputs:
+  run_id:
+    description: Lab run id / build number for artifact chaining
+    required: false
+    default: ""
+  jf_url:
+    description: JFrog Platform URL (no trailing slash)
+    required: false
+    default: "https://tomjpd2.jfrog.io"
+  server_id:
+    description: JFrog CLI server id
+    required: false
+    default: "tomjpd2"
+  oidc_provider_name:
+    description: OIDC provider name (used when JF_ACCESS_TOKEN is unset)
+    required: false
+    default: ""
+  oidc_audience:
+    description: OIDC audience (used when JF_ACCESS_TOKEN is unset)
+    required: false
+    default: ""
+  write_evidence_key:
+    description: Write lab/keys/evidence.key from EVIDENCE_SIGNING_KEY env
+    required: false
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: Set RUN_ID / BUILD_NUM
+      shell: bash
+      run: |
+        set -euo pipefail
+        RID="${{ inputs.run_id }}"
+        if [[ -z "${RID}" ]]; then
+          RID="${GITHUB_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
+        fi
+        {
+          echo "RUN_ID=${RID}"
+          echo "BUILD_NUM=${RID}"
+          echo "CI=true"
+          echo "SERVER_ID=${{ inputs.server_id }}"
+          echo "JF_URL=${{ inputs.jf_url }}"
+          echo "REGISTRY_HOST=$(echo '${{ inputs.jf_url }}' | sed -E 's|https?://||;s|/.*||')"
+        } >> "${GITHUB_ENV}"
+        echo "Resolved RUN_ID=${RID}"
+
+    - name: Setup JFrog CLI (access token)
+      if: env.JF_ACCESS_TOKEN != ''
+      uses: jfrog/setup-jfrog-cli@v4
+      env:
+        JF_URL: ${{ inputs.jf_url }}
+        JF_ACCESS_TOKEN: ${{ env.JF_ACCESS_TOKEN }}
+
+    - name: Setup JFrog CLI (OIDC)
+      if: env.JF_ACCESS_TOKEN == ''
+      uses: jfrog/setup-jfrog-cli@v4
+      env:
+        JF_URL: ${{ inputs.jf_url }}
+      with:
+        oidc-provider-name: ${{ inputs.oidc_provider_name }}
+        oidc-audience: ${{ inputs.oidc_audience }}
+
+    - name: Point lab scripts at configured server
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Prefer using the server configured by setup-jfrog-cli as SERVER_ID.
+        jf c use "${SERVER_ID}" 2>/dev/null || jf c use 2>/dev/null || true
+        jf c show || true
+
+    - name: Restore Evidence signing key
+      if: inputs.write_evidence_key == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p lab/keys
+        if [[ -z "${EVIDENCE_SIGNING_KEY:-}" ]]; then
+          echo "::warning::EVIDENCE_SIGNING_KEY unset; Evidence attach will fail without lab/keys/evidence.key"
+          exit 0
+        fi
+        if printf '%s' "${EVIDENCE_SIGNING_KEY}" | grep -q "BEGIN"; then
+          printf '%s\n' "${EVIDENCE_SIGNING_KEY}" > lab/keys/evidence.key
+        else
+          printf '%s' "${EVIDENCE_SIGNING_KEY}" | base64 --decode > lab/keys/evidence.key
+        fi
+        chmod 600 lab/keys/evidence.key
+        echo "Wrote lab/keys/evidence.key"
+
+    - name: Docker login to Artifactory
+      shell: bash
+      run: |
+        set -euo pipefail
+        jf docker login "${REGISTRY_HOST}" --server-id "${SERVER_ID}"

@@ -1,0 +1,52 @@
+# Customer talking point: Tier 3 governance — project, PreProd stage, Unified
+# Policy evidence gate, and AppTrust app versions bound to lab packages.
+name: 07 AppTrust gate bootstrap
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Optional run id for logging
+        required: false
+        type: string
+        default: ""
+      app_version:
+        description: AppTrust version for payments-api (package tag stays 2.0.0)
+        required: false
+        type: string
+        default: "2.0.0"
+      neg_app_version:
+        description: AppTrust version for rogue-api (package tag stays 1.0.0)
+        required: false
+        type: string
+        default: "1.0.0"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  gate-bootstrap:
+    runs-on: ubuntu-latest
+    env:
+      JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+      EVIDENCE_SIGNING_KEY: ${{ secrets.EVIDENCE_SIGNING_KEY }}
+      JF_URL: ${{ vars.JF_URL || 'https://tomjpd2.jfrog.io' }}
+      APP_VERSION: ${{ inputs.app_version }}
+      NEG_APP_VERSION: ${{ inputs.neg_app_version }}
+      PKG_VERSION: "2.0.0"
+      NEG_PKG_VERSION: "1.0.0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup lab
+        uses: ./.github/actions/setup-lab
+        with:
+          run_id: ${{ inputs.run_id }}
+          jf_url: ${{ env.JF_URL }}
+          oidc_provider_name: ${{ secrets.OIDC_PROVIDER_NAME }}
+          oidc_audience: ${{ secrets.OIDC_AUDIENCE }}
+          write_evidence_key: "false"
+
+      - name: Bootstrap AppTrust gate
+        run: ./lab/scripts/steps/gate-bootstrap.sh

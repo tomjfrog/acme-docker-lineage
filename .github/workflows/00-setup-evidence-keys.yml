@@ -1,0 +1,38 @@
+# Customer talking point: bootstrap the Evidence signing key (acme-lineage-lab)
+# so later publish steps can attach signed lineage attestations.
+name: 00 Setup Evidence keys
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Optional run id (default = github.run_id)
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  setup-keys:
+    runs-on: ubuntu-latest
+    env:
+      JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+      EVIDENCE_SIGNING_KEY: ${{ secrets.EVIDENCE_SIGNING_KEY }}
+      JF_URL: ${{ vars.JF_URL || 'https://tomjpd2.jfrog.io' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup lab
+        uses: ./.github/actions/setup-lab
+        with:
+          run_id: ${{ inputs.run_id }}
+          jf_url: ${{ env.JF_URL }}
+          oidc_provider_name: ${{ secrets.OIDC_PROVIDER_NAME }}
+          oidc_audience: ${{ secrets.OIDC_AUDIENCE }}
+          write_evidence_key: "true"
+
+      - name: Ensure trusted key alias acme-lineage-lab
+        run: ./lab/scripts/00-gen-keys.sh
