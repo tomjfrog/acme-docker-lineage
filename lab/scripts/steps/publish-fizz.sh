@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Publish Fizz (fizz-service) FROM Bar; Evidence names immediate parent only.
+# Publish Fizz (fizz-service) FROM payments-api; Evidence names immediate parent only.
 # Copied from lab/scripts/01-build-push.sh section 3 — original 01 left intact.
 set -euo pipefail
 STEPS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -54,7 +54,7 @@ cat > "${RUN_DIR}/grandchild-lineage-evidence.json" <<EOF
   "base_package_version": "${APP_TAG}",
   "derived_from_golden": false,
   "immediate_parent_only": true,
-  "note": "Immediate base is Bar (payments-api), not golden Foo. Root golden requires Evidence walk or layer-prefix.",
+  "note": "Immediate base is payments-api, not golden-base. Root golden requires Evidence walk or layer-prefix.",
   "lab": "acme-docker-lineage",
   "build_name": "acme-lineage-grandchild",
   "build_number": "${BUILD_NUM}",
@@ -62,7 +62,7 @@ cat > "${RUN_DIR}/grandchild-lineage-evidence.json" <<EOF
 }
 EOF
 
-log "Attach lineage Evidence to grandchild (immediate parent = Bar only)"
+log "Attach lineage Evidence to grandchild (immediate parent = payments-api only)"
 jf evd create \
   --server-id "${SERVER_ID}" \
   --package-name "${GRANDCHILD_NAME}" \
@@ -72,7 +72,7 @@ jf evd create \
   --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
   --key "${KEY_FILE}" \
   --key-alias "${KEY_ALIAS}" \
-  --format json | tee "${RUN_DIR}/grandchild-evidence-create.json" || {
+  | tee "${RUN_DIR}/grandchild-evidence-create.json" || {
     jf evd create \
       --server-id "${SERVER_ID}" \
       --subject-repo-path "${DOCKER_REPO}/${GRANDCHILD_NAME}/${GRANDCHILD_TAG}/manifest.json" \
@@ -80,7 +80,7 @@ jf evd create \
       --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
       --key "${KEY_FILE}" \
       --key-alias "${KEY_ALIAS}" \
-      --format json | tee "${RUN_DIR}/grandchild-evidence-create.json"
+      | tee "${RUN_DIR}/grandchild-evidence-create.json"
   }
 
 log "Fizz published. RUN_ID=${RUN_ID} digest=${GRANDCHILD_DIGEST}"

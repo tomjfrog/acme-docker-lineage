@@ -34,9 +34,13 @@ detect_live_predicate() {
   echo "${PREDICATE_TYPE_LINEAGE}"
 }
 
+require_platform
 PREDICATE_URI="${PREDICATE_URI:-$(detect_live_predicate)}"
 
 jf_api() {
+  if ! jf api --help >/dev/null 2>&1; then
+    die "jf api is required (Access/AppTrust REST). Upgrade JFrog CLI (lab pins >= 2.120.0 via setup-jfrog-cli)."
+  fi
   jf api --server-id "${SERVER_ID}" "$@"
 }
 
@@ -121,6 +125,9 @@ EOF
   log "Lifecycle promote_stages: DEV → ${STAGE_KEY}"
 }
 
+# TODO(rego-gate): template 1003 only checks that predicateType is present.
+# Semantic checks (derived_from_golden / root_golden_digest) belong in a custom
+# Unified Policy template: lab/policies/derived-from-golden.rego
 ensure_rule() {
   local rules rule_id
   rules="$(jf_api /unifiedpolicy/api/v1/rules 2>/dev/null)"
@@ -219,7 +226,7 @@ ensure_version() {
   local app="$1" ver="$2" pkg="$3" pkg_ver="$4"
   if jf_api "/apptrust/api/v1/applications/${app}/versions?limit=50" 2>/dev/null \
       | jq -e --arg v "${ver}" '(.versions // .)[]? | select(.version==$v)' >/dev/null 2>&1; then
-    log "Version ${app}@${ver} exists"
+    log "Version ${app}@${ver} exists (reused). If gate verify returns decision=error, pick a newer AppTrust version — the application-versions release bundle may be gone."
     return 0
   fi
   log "Creating version ${app}@${ver} from docker package ${pkg}:${pkg_ver}"
@@ -248,18 +255,35 @@ dry_run_promote() {
   "promotion_type": "dry_run"
 }
 EOF
-  local body status decision
+  local body status decision eval_id explanation
   body="$(jf_api -X POST -H "Content-Type: application/json" --input /tmp/dl-promote.json \
     "/apptrust/api/v1/applications/${app}/versions/${ver}/promote?async=false" 2>/dev/null || true)"
+  if ! echo "${body}" | jq -e . >/dev/null 2>&1; then
+    die "Promote API did not return JSON for ${app}@${ver}"
+  fi
   status="$(echo "${body}" | jq -r '.status // empty')"
   decision="$(echo "${body}" | jq -r '.evaluations.entry_gate.decision // empty')"
-  echo "${body}" | jq '{application: $app, version: $ver, status, decision: .evaluations.entry_gate.decision, explanation: .evaluations.entry_gate.explanation}' \
-    --arg app "${app}" --arg ver "${ver}"
+  eval_id="$(echo "${body}" | jq -r '.evaluations.entry_gate.eval_id // empty')"
+  explanation="$(echo "${body}" | jq -r '.evaluations.entry_gate.explanation // .message // empty')"
+  # decision=error (missing release bundle, etc.) often omits explanation on the promote body.
+  if [[ "${decision}" == "error" && -n "${eval_id}" ]]; then
+    explanation="$(
+      jf_api "/unifiedpolicy/api/v1/evaluations/${eval_id}" 2>/dev/null \
+        | jq -r '.explanation // .decision_breakdown[0].output.explanation // empty'
+    )"
+  fi
+  jq -n \
+    --arg app "${app}" --arg ver "${ver}" --arg status "${status}" \
+    --arg decision "${decision}" --arg explanation "${explanation}" --arg eval_id "${eval_id}" \
+    '{application: $app, version: $ver, status: $status, decision: $decision, explanation: $explanation, eval_id: $eval_id}'
+  if [[ "${decision}" == "error" ]]; then
+    die "Gate evaluation ERROR for ${app}@${ver}: ${explanation}"
+  fi
   if [[ "${expect}" == "pass" ]]; then
     [[ "${status}" == "success" && "${decision}" == "pass" ]] || die "Expected PASS for ${app}@${ver}, got status=${status} decision=${decision}"
     log "PASS as expected: ${app}@${ver}"
   else
-    [[ "${status}" == "failed" || "${decision}" == "fail" ]] || die "Expected FAIL for ${app}@${ver}, got status=${status} decision=${decision}"
+    [[ "${decision}" == "fail" ]] || die "Expected FAIL for ${app}@${ver}, got status=${status} decision=${decision}"
     log "FAIL as expected: ${app}@${ver}"
   fi
 }

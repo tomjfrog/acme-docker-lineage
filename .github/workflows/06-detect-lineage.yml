@@ -73,6 +73,7 @@ jobs:
         run: ./lab/scripts/02-detect-lineage.sh "${RUN_ID}"
 
       - name: Upload detector report
+        if: ${{ !env.ACT }}
         uses: actions/upload-artifact@v4
         with:
           name: lineage-report-${{ env.RUN_ID }}

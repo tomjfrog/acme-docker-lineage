@@ -54,6 +54,10 @@ runs:
       env:
         JF_URL: ${{ inputs.jf_url }}
         JF_ACCESS_TOKEN: ${{ env.JF_ACCESS_TOKEN }}
+      with:
+        # 2.91.0 (action default) lacks `jf api`, required by AppTrust/Access bootstrap.
+        version: 2.120.0
+        custom-server-id: ${{ inputs.server_id }}
 
     - name: Setup JFrog CLI (OIDC)
       if: env.JF_ACCESS_TOKEN == ''
@@ -61,16 +65,52 @@ runs:
       env:
         JF_URL: ${{ inputs.jf_url }}
       with:
+        version: 2.120.0
         oidc-provider-name: ${{ inputs.oidc_provider_name }}
         oidc-audience: ${{ inputs.oidc_audience }}
+        custom-server-id: ${{ inputs.server_id }}
 
     - name: Point lab scripts at configured server
       shell: bash
       run: |
         set -euo pipefail
-        # Prefer using the server configured by setup-jfrog-cli as SERVER_ID.
-        jf c use "${SERVER_ID}" 2>/dev/null || jf c use 2>/dev/null || true
+        # setup-jfrog-cli defaults to "setup-jfrog-cli-server" unless custom-server-id is set.
+        # Lab scripts pass --server-id "${SERVER_ID}", so keep env in sync with jf config.
+        if jf c use "${SERVER_ID}" 2>/dev/null; then
+          :
+        else
+          ACTIVE="$(
+            jf c show 2>/dev/null \
+              | awk -F': *' 'tolower($1) ~ /^server id$/ { gsub(/[[:space:]]/, "", $2); print $2; exit }'
+          )"
+          if [[ -z "${ACTIVE}" ]]; then
+            ACTIVE="setup-jfrog-cli-server"
+          fi
+          jf c use "${ACTIVE}"
+          echo "SERVER_ID=${ACTIVE}" >> "${GITHUB_ENV}"
+          echo "Mapped SERVER_ID '${{ inputs.server_id }}' -> '${ACTIVE}'"
+        fi
         jf c show || true
+
+    - name: Verify platform is reachable
+      shell: bash
+      run: |
+        set -uo pipefail
+        PING="$(jf rt ping --server-id "${SERVER_ID}" 2>&1)"
+        if [[ "${PING}" == *OK* ]]; then
+          echo "Platform ping OK"
+          exit 0
+        fi
+        # A deactivated SaaS instance 302s every request to the landing page, which
+        # answers 200 with HTML. Callers then "succeed" with unparseable bodies.
+        echo "::error::${JF_URL} did not answer jf rt ping."
+        if [[ "${PING}" == *"JFrog Landing"* || "${PING}" == *"<!DOCTYPE html>"* ]]; then
+          echo "Got the JFrog landing page, so the instance is deactivated or paused."
+          echo "Reactivate it at https://landing.jfrog.com/reactivate-server/${REGISTRY_HOST%%.*} and re-run."
+        else
+          printf '%s\n' "${PING}" | head -5
+        fi
+        exit 1
 
     - name: Restore Evidence signing key
       if: inputs.write_evidence_key == 'true'

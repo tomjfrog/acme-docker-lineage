@@ -40,10 +40,11 @@ jobs:
           oidc_audience: ${{ secrets.OIDC_AUDIENCE }}
           write_evidence_key: "false"
 
-      - name: Rename Bar → billing-service (no Evidence)
+      - name: Rename payments-api → billing-service (no Evidence)
         run: ./lab/scripts/steps/publish-rename.sh
 
       - name: Upload run artifacts
+        if: ${{ !env.ACT }}
         uses: actions/upload-artifact@v4
         with:
           name: lineage-run-${{ env.RUN_ID }}

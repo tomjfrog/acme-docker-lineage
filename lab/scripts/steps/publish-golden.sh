@@ -43,6 +43,9 @@ cat > "${RUN_DIR}/golden-evidence.json" <<EOF
 }
 EOF
 
+# TODO(idempotency): re-running this step re-attaches golden Evidence to the same
+# package version (same digest/tag). Prefer skip-if-present (e.g. jf evd get for
+# PREDICATE_TYPE_GOLDEN on the subject) or only create when digest/build_number is new.
 log "Attach golden Evidence"
 jf evd create \
   --server-id "${SERVER_ID}" \
@@ -53,7 +56,7 @@ jf evd create \
   --predicate-type "${PREDICATE_TYPE_GOLDEN}" \
   --key "${KEY_FILE}" \
   --key-alias "${KEY_ALIAS}" \
-  --format json | tee "${RUN_DIR}/golden-evidence-create.json" || {
+  | tee "${RUN_DIR}/golden-evidence-create.json" || {
     log "WARN: package-scoped evidence failed; trying subject-repo-path"
     jf evd create \
       --server-id "${SERVER_ID}" \
@@ -62,7 +65,7 @@ jf evd create \
       --predicate-type "${PREDICATE_TYPE_GOLDEN}" \
       --key "${KEY_FILE}" \
       --key-alias "${KEY_ALIAS}" \
-      --format json | tee "${RUN_DIR}/golden-evidence-create.json"
+      | tee "${RUN_DIR}/golden-evidence-create.json"
   }
 
 log "Golden published. RUN_ID=${RUN_ID} digest=${GOLDEN_DIGEST}"

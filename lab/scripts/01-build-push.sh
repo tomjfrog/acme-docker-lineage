@@ -70,7 +70,7 @@ jf evd create \
   --predicate-type "${PREDICATE_TYPE_GOLDEN}" \
   --key "${KEY_FILE}" \
   --key-alias "${KEY_ALIAS}" \
-  --format json | tee "${RUN_DIR}/golden-evidence-create.json" || {
+  | tee "${RUN_DIR}/golden-evidence-create.json" || {
     log "WARN: package-scoped evidence failed; trying subject-repo-path"
     jf evd create \
       --server-id "${SERVER_ID}" \
@@ -79,7 +79,7 @@ jf evd create \
       --predicate-type "${PREDICATE_TYPE_GOLDEN}" \
       --key "${KEY_FILE}" \
       --key-alias "${KEY_ALIAS}" \
-      --format json | tee "${RUN_DIR}/golden-evidence-create.json"
+      | tee "${RUN_DIR}/golden-evidence-create.json"
   }
 
 # ---------------------------------------------------------------------------
@@ -136,7 +136,7 @@ jf evd create \
   --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
   --key "${KEY_FILE}" \
   --key-alias "${KEY_ALIAS}" \
-  --format json | tee "${RUN_DIR}/app-evidence-create.json" || {
+  | tee "${RUN_DIR}/app-evidence-create.json" || {
     jf evd create \
       --server-id "${SERVER_ID}" \
       --subject-repo-path "${DOCKER_REPO}/${APP_NAME}/${APP_TAG}/manifest.json" \
@@ -144,12 +144,12 @@ jf evd create \
       --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
       --key "${KEY_FILE}" \
       --key-alias "${KEY_ALIAS}" \
-      --format json | tee "${RUN_DIR}/app-evidence-create.json"
+      | tee "${RUN_DIR}/app-evidence-create.json"
   }
 
 # ---------------------------------------------------------------------------
-# 3) Multi-hop grandchild: Fizz FROM Bar (payments-api), not directly FROM golden
-#    Evidence intentionally records only the immediate parent (Bar) — no root
+# 3) Multi-hop grandchild: Fizz FROM payments-api, not directly FROM golden
+#    Evidence intentionally records only the immediate parent (payments-api) — no root
 #    golden digest — so detectors must walk Evidence or use layer-prefix for root.
 # ---------------------------------------------------------------------------
 log "Build multi-hop grandchild → ${GRANDCHILD_IMAGE} (FROM ${APP_IMAGE})"
@@ -187,7 +187,7 @@ cat > "${RUN_DIR}/grandchild-lineage-evidence.json" <<EOF
   "base_package_version": "${APP_TAG}",
   "derived_from_golden": false,
   "immediate_parent_only": true,
-  "note": "Immediate base is Bar (payments-api), not golden Foo. Root golden requires Evidence walk or layer-prefix.",
+  "note": "Immediate base is payments-api, not golden-base. Root golden requires Evidence walk or layer-prefix.",
   "lab": "acme-docker-lineage",
   "build_name": "acme-lineage-grandchild",
   "build_number": "${BUILD_NUM}",
@@ -195,7 +195,7 @@ cat > "${RUN_DIR}/grandchild-lineage-evidence.json" <<EOF
 }
 EOF
 
-log "Attach lineage Evidence to grandchild (immediate parent = Bar only)"
+log "Attach lineage Evidence to grandchild (immediate parent = payments-api only)"
 jf evd create \
   --server-id "${SERVER_ID}" \
   --package-name "${GRANDCHILD_NAME}" \
@@ -205,7 +205,7 @@ jf evd create \
   --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
   --key "${KEY_FILE}" \
   --key-alias "${KEY_ALIAS}" \
-  --format json | tee "${RUN_DIR}/grandchild-evidence-create.json" || {
+  | tee "${RUN_DIR}/grandchild-evidence-create.json" || {
     jf evd create \
       --server-id "${SERVER_ID}" \
       --subject-repo-path "${DOCKER_REPO}/${GRANDCHILD_NAME}/${GRANDCHILD_TAG}/manifest.json" \
@@ -213,7 +213,7 @@ jf evd create \
       --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
       --key "${KEY_FILE}" \
       --key-alias "${KEY_ALIAS}" \
-      --format json | tee "${RUN_DIR}/grandchild-evidence-create.json"
+      | tee "${RUN_DIR}/grandchild-evidence-create.json"
   }
 
 # ---------------------------------------------------------------------------
@@ -262,7 +262,7 @@ cat > "${RUN_DIR}/summary.json" <<EOF
   "run": "${RUN_STAMP}",
   "registry": "${REGISTRY_HOST}",
   "repo": "${DOCKER_REPO}",
-  "spec_chain": "Foo=${GOLDEN_NAME} → Bar=${APP_NAME} → Fizz=${GRANDCHILD_NAME}",
+  "spec_chain": "golden-base=${GOLDEN_NAME} → payments-api=${APP_NAME} → fizz-service=${GRANDCHILD_NAME}",
   "golden": {"ref": "${GOLDEN_IMAGE}", "digest": "${GOLDEN_DIGEST}"},
   "app": {"ref": "${APP_IMAGE}", "digest": "${APP_DIGEST}"},
   "grandchild": {"ref": "${GRANDCHILD_IMAGE}", "digest": "${GRANDCHILD_DIGEST}", "immediate_base": "${APP_IMAGE}"},

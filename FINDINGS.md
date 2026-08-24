@@ -10,9 +10,9 @@
 
 Renaming an image does **not** change content digests or layer digests. Lineage is solvable with a layered model:
 
-1. **Explicit provenance** when CI publishes Build Info and/or Evidence (best).
-2. **Layer-chain inference** against a golden catalog when teams do not cooperate (practical forensic answer).
-3. **Governance gates** (Evidence / AppTrust policies, repo permissions) for “must have been built on golden.”
+1. **Explicit provenance** when CI publishes Build Info and/or Evidence (best; start here).
+2. **Layer-chain inference** against a golden catalog when teams do not cooperate (practical forensic answer—**scopes the issue**, not the long-term system of record).
+3. **Governance gates** (Evidence / AppTrust policies, repo permissions) for “must have been built on golden” (AppTrust when available; Evidence still valuable without it).
 
 **Compliant Version Selection (CVS) is not the product for this use case.** CVS substitutes compliant library package versions at resolve time (npm, Maven, PyPI, …). It does not answer “what base image did this Docker image come from?” Docker Curation/on-demand scanning is complementary security control, not lineage.
 
@@ -56,7 +56,7 @@ CI contract for every image published to local Docker repos:
 4. Attach Evidence with a lineage predicate including child digest, **immediate** base name + digest, and preferably **`root_golden_digest`** (or tooling must walk parent Evidence until a golden catalog hit). Include pipeline ID (`jf evd create`).
 5. Prefer BuildKit / GitHub provenance attestations so OCI attestations can land in Evidence Collection where licensed.
 
-**Multi-hop:** if Fizz only records `base=Bar`, answering “is the root golden?” requires walking Evidence Bar→Foo **or** storing `root_golden_digest` on every hop.
+**Multi-hop:** if Fizz only records `base=payments-api`, answering “is the root golden?” requires walking Evidence payments-api→golden-base **or** storing `root_golden_digest` on every hop.
 
 **Golden catalog:** store approved bases in a dedicated Docker local (or promoted tags) with:
 
@@ -73,7 +73,23 @@ For any image in a local Docker repo:
 3. If any golden image’s layer list is a **prefix** of the candidate → derived from that golden (**even if renamed**, and **even if multi-hop** as long as layers were not squashed).
 4. Else → not built on a known golden (or squashed / unknown).
 
-This is the practical answer to “we renamed the image — can we still tell?” and to “Fizz was built from Bar, not directly from Foo.”
+This is the practical answer to “we renamed the image — can we still tell?” and to “Fizz was built from payments-api, not directly from golden-base.”
+
+**Lab validated:** DiffID prefix alone correctly classifies renamed `billing-service` as derived-from-golden with **no** Evidence on that path (`DERIVED_FROM_GOLDEN (layer prefix)`).
+
+#### Why DiffID prefix is not the ideal primary solution
+
+Tier 2 proves the problem is **technically solvable from content alone**. It is **not** the recommended operating model at enterprise scale.
+
+| Shortcoming | Detail |
+|---|---|
+| Forensic, not governed | Prefix matching reconstructs ancestry from bytes. It does not prove a signed CI decision, an approved-base policy, or who was allowed to publish. |
+| Large custom build | You must maintain a golden DiffID catalog, extract DiffIDs for every candidate image, run matching at scale, handle inconclusive cases, and own the tooling—a platform program, not a product checkbox. |
+| Fragile on real builds | Squash, some rebuild/rebase flows, exotic inheritance, and multi-arch/index edge cases erase or obscure the prefix. “No match” often means **inconclusive**, not a clean policy failure. |
+| Weak lifecycle hooks | DiffID compare yields a report. It does not give a native promote/release control plane tied to package lifecycle. |
+| Weaker audit posture | Signed Evidence is durable and platform-queryable. A DiffID script is a later reconstruction that is harder to standardize and defend in audit. |
+
+**Positioning:** use DiffIDs to **scope the issue** and as a **backstop** when teams skip CI metadata—not as the system of record.
 
 ### Tier 3 — Governance (“should have been golden”)
 
@@ -82,11 +98,20 @@ This is the practical answer to “we renamed the image — can we still tell?�
 - Xray watches for vulnerability posture on non-golden paths (consequence, not proof).
 - Curation for Docker scanning/blocking as complementary control — **not CVS**.
 
+### Phased path: Evidence now, AppTrust when ready
+
+Customers may have **Evidence Collection today** without AppTrust yet. That still supports a strong interim state:
+
+1. **Now (Evidence available):** Make lineage an explicit CI contract—digest-pinned `FROM`, Build Info, and **signed derived-from Evidence** on every publish (immediate parent + preferably root golden). Query Evidence by package/digest for reviews, audits, and **manual** promote checks. Keep DiffID matching as the forensic backstop only.
+2. **Later (AppTrust / Unified Policy):** Same Evidence becomes the input to **promote gates**—block release unless required lineage Evidence is present. No re-architecture of the attestation model; governance turns on against the same predicates.
+
+**One-liner:** DiffIDs show blast radius and prove ancestry is recoverable; Evidence is the practical control to start today; AppTrust is how you enforce it later.
+
 ---
 
 ## Customer implementation checklist
 
-What the customer must put in place for lineage to be **traceable and verifiable** (including rename and multi-hop Foo → Bar → Fizz). This is the actionable roll-up of the three-tier model above—not a substitute for the lab evidence that validates it.
+What the customer must put in place for lineage to be **traceable and verifiable** (including rename and multi-hop golden-base → payments-api → fizz-service). This is the actionable roll-up of the three-tier model above—not a substitute for the lab evidence that validates it.
 
 ### 1. Platform foundations (JFrog)
 
@@ -119,7 +144,7 @@ For every derived image (direct child **or** child-of-child):
    - immediate `base_image_ref` + `base_image_digest`
    - preferably `base_package_name` / `base_package_version` (for walks)
    - pipeline / build identifiers
-   **Multi-hop:** also store `root_golden_digest` (and/or only claim `derived_from_golden: true` when verified). If CI records only the immediate parent (Bar), tooling **must** walk Evidence until a golden catalog hit.
+   **Multi-hop:** also store `root_golden_digest` (and/or only claim `derived_from_golden: true` when verified). If CI records only the immediate parent (payments-api), tooling **must** walk Evidence until a golden catalog hit.
 4. Optional searchable properties/labels (e.g. `com.acme.base.digest=…`) as an operational overlay—not a substitute for Evidence.
 
 Bare `docker push` with no Build Info / Evidence leaves verification dependent on Tier 2 forensics only.
@@ -181,8 +206,8 @@ A script, Worker, internal service, or gated pipeline step that can:
 ```
 lab/
   golden/Dockerfile                 # Foo — approved base (alpine + marker)
-  app-from-golden/Dockerfile        # Bar — FROM golden + app layer
-  app-from-intermediate/Dockerfile  # Fizz — FROM Bar (multi-hop)
+  app-from-golden/Dockerfile        # payments-api — FROM golden + app layer
+  app-from-intermediate/Dockerfile  # Fizz — FROM payments-api (multi-hop)
   app-non-golden/Dockerfile         # different base (debian)
   scripts/
     lib.sh                   # shared env / helpers
@@ -196,7 +221,7 @@ lab/
 
 **Registry path pattern:** `tomjpd2.jfrog.io/lineage-docker-local/<name>:<tag>`
 
-**SPEC chain exercised:** Foo (`golden-base`) → Bar (`payments-api`) → Fizz (`fizz-service`)
+**Image chain exercised:** `golden-base` → `payments-api` → `fizz-service` (see SPEC.md for the original problem-statement aliases)
 
 ---
 
@@ -209,8 +234,8 @@ The lab on `tomjpd2` was run to pressure-test what JFrog and OCI metadata can pr
 | 1 | **Provision a dedicated Docker local** | Created `lineage-docker-local` on `tomjpd2.jfrog.io` as the system of record for golden and app images. | Lineage work needs a controllable catalog of approved bases and app publishes in Artifactory—not ad-hoc tags on Docker Hub. | Stand up (or designate) golden + application Docker locals/virtuals; treat Artifactory as the authoritative registry for base and derived images. |
 | 2 | **Bootstrap Evidence signing** | Ran `lab/scripts/00-gen-keys.sh` (`jf evd gen-keys`, alias `acme-lineage-lab`) and uploaded the public key to Platform trusted keys. | Explicit provenance (Tier 1) requires signed Evidence; signing keys are a prerequisite, not the lineage answer itself. | Register org signing keys early; use Evidence for integrity of lineage claims. Do **not** frame the whole problem as “we need signing.” |
 | 3 | **Build & publish a golden base (Foo)** | Built `lab/golden` → `golden-base:1.0.0`, pushed with `jf docker push --build-name/--build-number`, published Build Info, set `golden.image=true`, attached Evidence predicate `…/golden-base/v1`. | A golden **catalog entry** is more than a tag: properties + Build Info + Evidence make “approved base” queryable. | Maintain an approved-base catalog in Artifactory (properties and/or Evidence). Pin consumers to digests from that catalog. |
-| 4 | **Build Bar FROM golden** | Built `payments-api:2.0.0` with `FROM` the Artifactory golden image; pushed with Build Info; attached lineage Evidence (`base_image_digest` = Foo). | When CI cooperates, Evidence + Build Info give **strong, rename-resilient** explicit lineage (Tier 1). | Make Build Info + lineage Evidence (or SLSA/OCI attestations) a CI contract for every image published to local Docker repos. |
-| 5 | **Build Fizz FROM Bar (multi-hop)** | Built `fizz-service:0.1.0` `FROM` payments-api; Evidence records **only** immediate parent Bar (`immediate_parent_only: true`, no root golden digest). | Root-is-golden is still provable via (a) golden DiffID **prefix** on Fizz and (b) Evidence **walk** Fizz → Bar → Foo. Immediate-parent Evidence alone is insufficient. | Require either `root_golden_digest` in every lineage predicate **or** tooling that walks parent Evidence until a golden catalog hit. |
+| 4 | **Build payments-api FROM golden** | Built `payments-api:2.0.0` with `FROM` the Artifactory golden image; pushed with Build Info; attached lineage Evidence (`base_image_digest` = golden). | When CI cooperates, Evidence + Build Info give **strong, rename-resilient** explicit lineage (Tier 1). | Make Build Info + lineage Evidence (or SLSA/OCI attestations) a CI contract for every image published to local Docker repos. |
+| 5 | **Build Fizz FROM payments-api (multi-hop)** | Built `fizz-service:0.1.0` `FROM` payments-api; Evidence records **only** immediate parent payments-api (`immediate_parent_only: true`, no root golden digest). | Root-is-golden is still provable via (a) golden DiffID **prefix** on Fizz and (b) Evidence **walk** fizz-service → payments-api → golden-base. Immediate-parent Evidence alone is insufficient. | Require either `root_golden_digest` in every lineage predicate **or** tooling that walks parent Evidence until a golden catalog hit. |
 | 6 | **Rename without CI cooperation** | `docker tag` / push same image as `billing-service:9.9.9` with **no** Build Info and **no** Evidence. Digests matched `payments-api:2.0.0` exactly. | Rename does **not** change content or layer DiffIDs. Evidence on the old package path does not auto-appear on the new name—but **layer-prefix matching still detects golden derivation**. | Answer Murphy/Ashwani directly: name change alone cannot hide golden lineage if you correlate layers (or digests). Prefer digest-keyed Evidence queries in tooling. |
 | 7 | **Build a non-golden control** | Built/pushed `rogue-api:1.0.0` from `debian:bookworm-slim` (not the golden catalog). | Negative control: no golden DiffID prefix → correctly classified as not derived from golden. | Detection must produce both true positives and true negatives; use a golden catalog, not “any alpine/debian.” |
 | 8 | **Run the lineage detector** | `lab/scripts/02-detect-lineage.sh`: (a) DiffID prefix vs golden, (b) Evidence on package, (c) Evidence walk to golden, (d) Build Info. | Tier 2 works for direct, renamed, and multi-hop; Tier 1 multi-hop needs walk or root digest; name/tag alone is insufficient. | Deploy catalog + layer prefix ± Evidence walk for audit/forensics; reserve AppTrust/Unified Policy evidence gates for promote/release (Tier 3). |
@@ -221,7 +246,7 @@ The lab on `tomjpd2` was run to pressure-test what JFrog and OCI metadata can pr
 ```mermaid
 flowchart LR
   step3[Step 3 golden Foo] --> tier1[Tier 1 Explicit]
-  step4[Step 4 Bar Evidence] --> tier1
+  step4[Step 4 payments-api Evidence] --> tier1
   step5[Step 5 Fizz multi-hop] --> tier1
   step5 --> tier2[Tier 2 Forensic layers]
   step6[Step 6 rename] --> tier2
@@ -251,27 +276,27 @@ Prior run `20260812114414` covered direct + rename + non-golden only (pre multi-
 ## Lab results
 
 **Run:** `20260817152017` on `tomjpd2.jfrog.io` / `lineage-docker-local`  
-**SPEC chain:** Foo=`golden-base` → Bar=`payments-api` → Fizz=`fizz-service`  
+**Image chain:** `golden-base` → `payments-api` → `fizz-service`  
 **Detector summary:** pass 4 / fail 0 (see `lab/out/20260817152017/lineage-results.json`)
 
 | Case | Image | Digest | Layer prefix of golden? | Evidence | Evidence walk → golden? | Build Info | Verdict |
 |---|---|---|---|---|---|---|---|
-| App from golden (Bar) | `payments-api:2.0.0` | `sha256:72ca7c68335…` | **true** | **found** | **true** (Bar → Foo) | found | ROOT_IS_GOLDEN (layers + Evidence walk) |
-| Grandchild (Fizz) | `fizz-service:0.1.0` | `sha256:a23d0d80ca9…` | **true** | **found** (immediate base = Bar only) | **true** (Fizz → Bar → Foo) | found | ROOT_IS_GOLDEN (layers + Evidence walk) |
-| Renamed (no CI metadata) | `billing-service:9.9.9` | `sha256:72ca7c68335…` (**same as Bar**) | **true** | missing (by design) | n/a | n/a | DERIVED_FROM_GOLDEN via layers |
+| App from golden (payments-api) | `payments-api:2.0.0` | `sha256:72ca7c68335…` | **true** | **found** | **true** (payments-api → golden) | found | ROOT_IS_GOLDEN (layers + Evidence walk) |
+| Grandchild (Fizz) | `fizz-service:0.1.0` | `sha256:a23d0d80ca9…` | **true** | **found** (immediate base = payments-api only) | **true** (fizz → payments-api → golden) | found | ROOT_IS_GOLDEN (layers + Evidence walk) |
+| Renamed (no CI metadata) | `billing-service:9.9.9` | `sha256:72ca7c68335…` (**same as payments-api**) | **true** | missing (by design) | n/a | n/a | DERIVED_FROM_GOLDEN via layers |
 | Non-golden | `rogue-api:1.0.0` | `sha256:626d0e47247…` | **false** | missing | n/a | found | NOT_DERIVED_FROM_GOLDEN |
 
 Golden catalog entry: `golden-base:1.0.0` @ `sha256:d3c58610c5a…` with property `golden.image=true` and Evidence predicate type `…/golden-base/v1`.
 
-**Multi-hop proof:** Fizz Evidence predicate set `derived_from_golden: false` / `immediate_parent_only: true` and named only Bar. Detector still established root golden via (1) DiffID prefix of Foo on Fizz and (2) Evidence walk Fizz → Bar → Foo.
+**Multi-hop proof:** Fizz Evidence predicate set `derived_from_golden: false` / `immediate_parent_only: true` and named only payments-api. Detector still established root golden via (1) DiffID prefix of golden on Fizz and (2) Evidence walk fizz-service → payments-api → golden-base.
 
-**Rename proof:** retag/push of Bar as `billing-service:9.9.9` reused identical content digest and DiffID chain; name change alone did not break Tier 2 detection. Evidence did not auto-appear on the renamed path.
+**Rename proof:** retag/push of payments-api as `billing-service:9.9.9` reused identical content digest and DiffID chain; name change alone did not break Tier 2 detection. Evidence did not auto-appear on the renamed path.
 
 Layer DiffIDs observed (`20260817152017`):
 
 - Golden / Foo (2): `88b4fba6…`, `c88d67c6…`
-- Bar / renamed (3): golden prefix + `319e8ad1…`
-- Fizz (4): Bar prefix + `c761e90e…`
+- payments-api / renamed (3): golden prefix + `319e8ad1…`
+- Fizz (4): payments-api prefix + `c761e90e…`
 - Non-golden (2): `709e0d49…`, `c5b807ec…` (no overlap with golden)
 
 ### Limitations observed
@@ -308,6 +333,8 @@ Layer DiffIDs observed (`20260817152017`):
 | `payments-api@2.0.1` | success | **pass** |
 | `rogue-api@1.0.1` | failed | **fail** — policy `Docker Lineage - PreProd Entry Lineage Gate` |
 
+Do **not** reuse AppTrust version `payments-api@2.0.0` on this instance: its application-versions release bundle is missing (`release bundle not found: payments-api/2.0.0, repository dockerlineage-application-versions`), so the gate returns **`decision: error`**, not pass/fail. Docker package tag remains `payments-api:2.0.0`; AppTrust version is independent.
+
 Reproduce:
 
 ```bash
@@ -316,6 +343,19 @@ Reproduce:
 ./lab/scripts/02-detect-lineage.sh
 ./lab/scripts/03-apptrust-gate.sh
 ```
+
+### TODO(rego-gate): evaluate Evidence *contents*, not just type
+
+Template `1003` is a **presence** check on `predicateType`. It does not read `derived_from_golden`, `base_image_digest`, or `root_golden_digest`.
+
+AppTrust **custom templates** are [Rego](https://docs.jfrog.com/governance/docs/custom-templates) (`package curation.policies`, `allow.should_allow`) evaluated against [OneModel Evidence](https://docs.jfrog.com/governance/docs/custom-templates) at promote time ([Create Template API](https://docs.jfrog.com/governance/reference/templatescreate), [allowed builtins](https://docs.jfrog.com/governance/docs/allowed-rego-operations)). Draft: `lab/policies/derived-from-golden.rego` (not wired into step 07).
+
+When implementing:
+
+1. Dump OneModel for `payments-api@2.0.0` and confirm evidenceConnection / predicate JSON paths.
+2. `POST /unifiedpolicy/api/v1/templates`, then a rule from that template (replace or sit beside `1003`).
+3. Require `derived_from_golden == true` **or** a non-empty `root_golden_digest` on the lineage predicate. Do **not** try to walk parent Evidence in Rego (no recursion; no `http.send` to look up the golden catalog).
+4. Stretch control: Fizz’s current predicate is the right **type** with `derived_from_golden: false` / immediate-parent only — `1003` would pass; the custom template should fail until CI writes root-golden on every hop.
 
 ### Cleanup note
 
@@ -331,6 +371,8 @@ For the full implementation roll-up, see **[Customer implementation checklist](#
 2. JFrog natively contributes **Build Info**, **Evidence Collection** (incl. OCI/SLSA attestations), artifact properties, and content-addressed Docker storage for layer correlation; Xray adds SBOM/security context.
 3. **Rename does not erase lineage** at the digest/layer level.
 4. **Multi-hop** (child built from child) still needs root-is-golden proof: layer-prefix vs golden catalog, Evidence walk, or `root_golden_digest` in CI predicates — validated in lab run `20260817152017`.
-5. Detect images that “could / should have been” on golden via Tier 2 catalog matching + Tier 3 gates.
-6. **Tier 3 works:** AppTrust / Unified Policy can **block promote** into `dockerlineage-PreProd` unless derived-from lineage Evidence is on the application version’s packages — validated with `payments-api` (pass) vs `rogue-api` (fail).
-7. **CVS** addresses compliant *library* version selection — adjacent governance story for languages, not Docker base lineage.
+5. **DiffIDs scope the issue; they are not the product path.** Prefix matching proves ancestry is recoverable (incl. rename), but operationalizing it as the system of record is a large custom engineering program (catalog, scale, edge cases, no native promote gate, weaker audit). See [Why DiffID prefix is not the ideal primary solution](#why-diffid-prefix-is-not-the-ideal-primary-solution).
+6. **Start with Evidence today** (CI contract + queryable signed lineage) even if AppTrust is not licensed yet; use DiffID forensics only as a backstop for non-cooperating teams.
+7. **AppTrust later:** same derived-from Evidence feeds promote gates—no re-architecture. Detect images that “could / should have been” on golden via Tier 2 catalog matching + Tier 3 gates when available.
+8. **Tier 3 works:** AppTrust / Unified Policy can **block promote** into `dockerlineage-PreProd` unless derived-from lineage Evidence is on the application version’s packages — validated with `payments-api` (pass) vs `rogue-api` (fail).
+9. **CVS** addresses compliant *library* version selection — adjacent governance story for languages, not Docker base lineage.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Retag/push Bar as billing-service with no Build Info / Evidence (rename demo).
+# Retag/push payments-api as billing-service with no Build Info / Evidence (rename demo).
 # Copied from lab/scripts/01-build-push.sh section 4 — original 01 left intact.
 set -euo pipefail
 STEPS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,7 +8,7 @@ source "${STEPS_DIR}/_common.sh"
 
 ensure_docker_login
 
-# Prefer local image; otherwise pull Bar from registry.
+# Prefer local image; otherwise pull payments-api from registry.
 if ! docker image inspect "${APP_IMAGE}" >/dev/null 2>&1; then
   log "Pulling ${APP_IMAGE} for retag"
   docker pull "${APP_IMAGE}"

@@ -1,4 +1,4 @@
-# Customer talking point: multi-hop Fizz FROM Bar with immediate-parent-only
+# Customer talking point: multi-hop Fizz FROM payments-api with immediate-parent-only
 # Evidence — root-is-golden needs Evidence walk or layer-prefix (Tier 1+2).
 name: 03 Publish Fizz multi-hop
 
@@ -43,6 +43,7 @@ jobs:
         run: ./lab/scripts/steps/publish-fizz.sh
 
       - name: Upload run artifacts
+        if: ${{ !env.ACT }}
         uses: actions/upload-artifact@v4
         with:
           name: lineage-run-${{ env.RUN_ID }}

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Publish Bar (payments-api) FROM golden + lineage Evidence.
+# Publish payments-api FROM golden + lineage Evidence.
 # Copied from lab/scripts/01-build-push.sh section 2 — original 01 left intact.
 set -euo pipefail
 STEPS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -70,7 +70,7 @@ jf evd create \
   --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
   --key "${KEY_FILE}" \
   --key-alias "${KEY_ALIAS}" \
-  --format json | tee "${RUN_DIR}/app-evidence-create.json" || {
+  | tee "${RUN_DIR}/app-evidence-create.json" || {
     jf evd create \
       --server-id "${SERVER_ID}" \
       --subject-repo-path "${DOCKER_REPO}/${APP_NAME}/${APP_TAG}/manifest.json" \
@@ -78,7 +78,7 @@ jf evd create \
       --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
       --key "${KEY_FILE}" \
       --key-alias "${KEY_ALIAS}" \
-      --format json | tee "${RUN_DIR}/app-evidence-create.json"
+      | tee "${RUN_DIR}/app-evidence-create.json"
   }
 
-log "Bar published. RUN_ID=${RUN_ID} digest=${APP_DIGEST}"
+log "payments-api published. RUN_ID=${RUN_ID} digest=${APP_DIGEST}"

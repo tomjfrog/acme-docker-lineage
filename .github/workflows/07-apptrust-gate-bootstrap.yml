@@ -14,12 +14,12 @@ on:
         description: AppTrust version for payments-api (package tag stays 2.0.0)
         required: false
         type: string
-        default: "2.0.0"
+        default: "2.0.1"
       neg_app_version:
         description: AppTrust version for rogue-api (package tag stays 1.0.0)
         required: false
         type: string
-        default: "1.0.0"
+        default: "1.0.1"
 
 permissions:
   id-token: write

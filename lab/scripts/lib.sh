@@ -20,14 +20,15 @@ JF_URL="${JF_URL:-https://tomjpd2.jfrog.io}"
 DOCKER_REPO="${DOCKER_REPO:-lineage-docker-local}"
 REGISTRY_HOST="${REGISTRY_HOST:-tomjpd2.jfrog.io}"
 
-# SPEC mapping: Foo=golden-base, Bar=payments-api (APP), Fizz=fizz-service (GRANDCHILD)
+# Image names used in the lab (see SPEC.md for original problem-statement aliases):
+#   golden-base (APP base), payments-api (direct descendant), fizz-service (multi-hop)
 GOLDEN_NAME="${GOLDEN_NAME:-golden-base}"
 GOLDEN_TAG="${GOLDEN_TAG:-1.0.0}"
 APP_NAME="${APP_NAME:-payments-api}"
 APP_TAG="${APP_TAG:-2.0.0}"
 APP_RENAMED_NAME="${APP_RENAMED_NAME:-billing-service}"
 APP_RENAMED_TAG="${APP_RENAMED_TAG:-9.9.9}"
-# Multi-hop grandchild: FROM APP (Bar), not directly FROM golden (Foo)
+# Multi-hop grandchild: FROM payments-api, not directly FROM golden-base
 GRANDCHILD_NAME="${GRANDCHILD_NAME:-fizz-service}"
 GRANDCHILD_TAG="${GRANDCHILD_TAG:-0.1.0}"
 NON_GOLDEN_NAME="${NON_GOLDEN_NAME:-rogue-api}"
@@ -56,6 +57,18 @@ require_cmd() {
 
 jf_rt() {
   jf rt "$@" --server-id "${SERVER_ID}"
+}
+
+# A deactivated SaaS instance 302s everything to the landing page, which answers
+# 200 with HTML. Without this check, callers "succeed" and jq dies on <!DOCTYPE.
+require_platform() {
+  local ping
+  ping="$(jf rt ping --server-id "${SERVER_ID}" 2>&1)"
+  [[ "${ping}" == *OK* ]] && return 0
+  if [[ "${ping}" == *"JFrog Landing"* || "${ping}" == *"<!DOCTYPE html>"* ]]; then
+    die "${JF_URL:-platform} is deactivated (serving the JFrog landing page). Reactivate at https://landing.jfrog.com/reactivate-server/<instance> and re-run."
+  fi
+  die "jf rt ping failed for server-id ${SERVER_ID}: $(printf '%s' "${ping}" | head -3)"
 }
 
 image_digest() {

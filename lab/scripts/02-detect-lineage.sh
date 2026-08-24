@@ -2,7 +2,7 @@
 # Detect whether candidate images are derived from the golden base via:
 #   1) layer DiffID prefix matching (forensic / rename-safe / multi-hop root)
 #   2) Evidence lookup (explicit provenance when present)
-#   3) Evidence parent-chain walk (multi-hop: Fizz → Bar → Foo)
+#   3) Evidence parent-chain walk (multi-hop: fizz-service → payments-api → golden-base)
 #   4) Build Info presence (supporting signal)
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -216,7 +216,7 @@ json_cases='[]'
   echo "Run: \`${RUN_STAMP}\`"
   echo "Golden (Foo): \`$(cat "${RUN_DIR}/golden.ref.txt")\`"
   echo "Golden digest: \`${GOLDEN_DIGEST}\`"
-  echo "SPEC chain: Foo=\`${GOLDEN_NAME}\` → Bar=\`${APP_NAME}\` → Fizz=\`${GRANDCHILD_NAME}\`"
+  echo "Image chain: golden-base=\`${GOLDEN_NAME}\` → payments-api=\`${APP_NAME}\` → fizz-service=\`${GRANDCHILD_NAME}\`"
   echo
   echo "| Case | Layer prefix of golden? | Evidence on package | Evidence walk → golden? | Build Info | Verdict |"
   echo "|---|---|---|---|---|---|"
@@ -329,13 +329,13 @@ jq -n \
   --arg run "${RUN_STAMP}" \
   --arg golden_ref "$(cat "${RUN_DIR}/golden.ref.txt")" \
   --arg golden_digest "${GOLDEN_DIGEST}" \
-  --arg chain "Foo=${GOLDEN_NAME} → Bar=${APP_NAME} → Fizz=${GRANDCHILD_NAME}" \
+  --arg chain "golden-base=${GOLDEN_NAME} → payments-api=${APP_NAME} → fizz-service=${GRANDCHILD_NAME}" \
   --argjson cases "${json_cases}" \
   --argjson pass "${pass_count}" \
   --argjson fail "${fail_count}" \
   '{
     run: $run,
-    spec_chain: $chain,
+    image_chain: $chain,
     golden: {ref: $golden_ref, digest: $golden_digest},
     cases: $cases,
     summary: {pass: $pass, fail: $fail}
@@ -352,8 +352,8 @@ jq -n \
   echo
   echo "## Multi-hop notes"
   echo
-  echo "- **Tier 2 (layers):** golden DiffID prefix on Fizz proves root is golden even when \`FROM\` was Bar."
-  echo "- **Tier 1 (Evidence):** Fizz predicate names only Bar; walk Fizz → Bar → Foo is required unless \`root_golden_digest\` is recorded."
+  echo "- **Tier 2 (layers):** golden DiffID prefix on Fizz proves root is golden even when \`FROM\` was payments-api."
+  echo "- **Tier 1 (Evidence):** Fizz predicate names only payments-api; walk fizz-service → payments-api → golden-base is required unless \`root_golden_digest\` is recorded."
 } >> "${REPORT}"
 
 log "Report → ${REPORT}"
