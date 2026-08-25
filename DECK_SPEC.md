@@ -336,3 +336,4 @@ Secondary caption under the label (italic, `--text-secondary`):
 4. Keep titles exactly as specified unless a character limit in the template requires a trivial trim.
 5. Deliver: deck URL or file path, plus a one-line confirmation of slide count.
 6. Do not add an agenda slide, a problem-statement recap, a “why JFrog” slide, or a CVS slide.
+7. Do not add a documentation slide. If the customer asks for links after the meeting, point them to **FINDINGS.md → Documentation (customer leave-behind)** (same list as the repo root README).

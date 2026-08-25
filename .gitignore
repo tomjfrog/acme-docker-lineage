@@ -4,3 +4,4 @@ lab/out/
 *.pub
 .DS_Store
 .github/act/secrets
+~$*.pptx

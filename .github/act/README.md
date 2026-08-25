@@ -144,3 +144,15 @@ act workflow_dispatch -W .github/workflows/01-publish-golden.yml \
   --secret-file .github/act/secrets \
   -e /tmp/dispatch.json
 ```
+
+## Related documentation
+
+Customer-facing JFrog product links (Evidence, Build Info, AppTrust, Docker) are in the repo root [README](../../README.md) and in [FINDINGS.md — Documentation](../../FINDINGS.md#documentation-customer-leave-behind).
+
+For this `act` / GitHub Actions path specifically:
+
+- [GitHub: OIDC Authentication](https://docs.jfrog.com/integrations/docs/github-actions-oidc-authentication) — use on GitHub.com; `act` cannot use OIDC, so set `JF_ACCESS_TOKEN` instead
+- [OpenID Connect Integration](https://docs.jfrog.com/administration/docs/openid-connect-integration) — platform-side OIDC provider
+- [jfrog/setup-jfrog-cli](https://github.com/jfrog/setup-jfrog-cli) — action used by `setup-lab` (pin CLI ≥ 2.120.0 for `jf api`)
+- [Create Evidence using the JFrog CLI](https://docs.jfrog.com/governance/docs/create-evidence-using-the-jfrog-cli) — `jf evd create` on publish workflows
+- [Use Docker with JFrog CLI](https://docs.jfrog.com/artifactory/docs/jf-docker) — `jf docker push` / login against the JPD

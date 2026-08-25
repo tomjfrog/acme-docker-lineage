@@ -376,3 +376,64 @@ For the full implementation roll-up, see **[Customer implementation checklist](#
 7. **AppTrust later:** same derived-from Evidence feeds promote gates—no re-architecture. Detect images that “could / should have been” on golden via Tier 2 catalog matching + Tier 3 gates when available.
 8. **Tier 3 works:** AppTrust / Unified Policy can **block promote** into `dockerlineage-PreProd` unless derived-from lineage Evidence is on the application version’s packages — validated with `payments-api` (pass) vs `rogue-api` (fail).
 9. **CVS** addresses compliant *library* version selection — adjacent governance story for languages, not Docker base lineage.
+
+---
+
+## Documentation (customer leave-behind)
+
+Public JFrog docs for the capabilities in this recommendation. Share this list with the customer; it is not a product pitch beyond what this engagement uses.
+
+### Docker / Artifactory (identity, query, overlay)
+
+| Topic | Why it matters here | Doc |
+|---|---|---|
+| Docker repositories | Push/pull of golden and app images through Artifactory | [Docker Repositories](https://docs.jfrog.com/artifactory/docs/docker-repositories) |
+| Additional Docker notes | Manifests, tags, and registry behavior | [Additional Docker Information](https://docs.jfrog.com/artifactory/docs/additional-docker-information) |
+| OCI repositories | OCI index / multi-arch subjects (Evidence may attach to `list.manifest.json`) | [OCI Repositories](https://docs.jfrog.com/artifactory/docs/oci-repositories) |
+| Remote / virtual repos | Pull-through cache is **path of the cached artifact**, not derived-image lineage | [Remote Repositories](https://docs.jfrog.com/artifactory/docs/remote-repositories), [Virtual Repositories](https://docs.jfrog.com/artifactory/docs/virtual-repositories) |
+| `jf docker` | Build, push, scan with CLI; `--build-name` / `--build-number` | [Use Docker with JFrog CLI](https://docs.jfrog.com/artifactory/docs/jf-docker) |
+| Artifact properties | Operational overlay (e.g. `golden.image=true`); not a substitute for Evidence | [JFrog Properties](https://docs.jfrog.com/artifactory/docs/jfrog-properties) |
+| AQL | Query packages, properties, and builds by digest | [Artifactory Query Language](https://docs.jfrog.com/artifactory/docs/artifactory-query-language) |
+
+### Build Info (MVP — CI publish)
+
+| Topic | Why it matters here | Doc |
+|---|---|---|
+| What Build Info is | Image tied to a build, not only a tag | [About Build Info](https://docs.jfrog.com/integrations/docs/about-build-info) |
+| Collect and publish | `jf docker push` + `jf rt build-publish` | [Build-Info Integration](https://docs.jfrog.com/artifactory/docs/build-integration) |
+
+### Evidence (MVP — signed lineage on digest)
+
+| Topic | Why it matters here | Doc |
+|---|---|---|
+| Evidence Collection | System of record for derived-from claims | [Evidence Management](https://docs.jfrog.com/governance/docs/evidence-management), [Evidence Quickstart](https://docs.jfrog.com/governance/docs/evidence-quick-start) |
+| Setup and keys | Org signing keys before `jf evd create` | [Evidence Setup](https://docs.jfrog.com/governance/docs/evidence-setup), [Create a Key Pair](https://docs.jfrog.com/governance/docs/create-a-key-pair-for-evidence), [Upload public key](https://docs.jfrog.com/governance/docs/upload-the-public-key-to-artifactory) |
+| Create / CLI | Attach predicate (child digest, base, optional `root_golden_digest`) | [Create Evidence](https://docs.jfrog.com/governance/docs/create-evidence), [Create Evidence using JFrog CLI](https://docs.jfrog.com/governance/docs/create-evidence-using-the-jfrog-cli), [Evidence Service CLI](https://docs.jfrog.com/governance/docs/evidence-service-cli) |
+| Predicate / payload | What to store vs name/tag | [Evidence Predicate](https://docs.jfrog.com/governance/docs/evidence-predicate), [Understanding Evidence Files](https://docs.jfrog.com/governance/docs/understanding-evidence-files) |
+| Query | Look up by package/digest after rename | [View Evidence](https://docs.jfrog.com/governance/docs/view-evidence), [Search for Evidence using GraphQL](https://docs.jfrog.com/governance/docs/search-for-evidence-using-graphql) |
+| GitHub attestations | Optional: GHA provenance into Evidence Collection | [GitHub attestation to JFrog Evidence](https://docs.jfrog.com/integrations/docs/github-actions-github-attestation-to-jfrog-evidence) |
+
+### AppTrust / Unified Policy (future — promote gates)
+
+| Topic | Why it matters here | Doc |
+|---|---|---|
+| AppTrust | Governs Evidence at promote; does not replace it | [AppTrust Overview](https://docs.jfrog.com/governance/docs/jfrog-apptrust), [AppTrust Prerequisites](https://docs.jfrog.com/governance/docs/apptrust-prerequisites) |
+| Versions and promote | Same metadata, stronger control | [Application Versions](https://docs.jfrog.com/governance/docs/application-version-management), [Promote an Application Version](https://docs.jfrog.com/governance/docs/promote-an-application-version) |
+| Policies | Entry/block gates on Evidence presence (template `1003` in the lab) | [Policies & Evaluations](https://docs.jfrog.com/governance/docs/lifecycle-policy-management), [Create Lifecycle Policy](https://docs.jfrog.com/governance/docs/create-lifecycle-policies) |
+| Custom Rego | Evaluate predicate **contents** (e.g. `derived_from_golden`), not only type | [Custom Templates](https://docs.jfrog.com/governance/docs/custom-templates), [Allowed Rego Operations](https://docs.jfrog.com/governance/docs/allowed-rego-operations), [Create Template API](https://docs.jfrog.com/governance/reference/templatescreate) |
+| CLI | Bind packages, promote, dry-run | [AppTrust CLI](https://docs.jfrog.com/governance/docs/apptrust-cli), [Promote Application Version CLI](https://docs.jfrog.com/governance/docs/promote-application-version-cli) |
+
+### Adjacent (security, not lineage)
+
+| Topic | Why it matters here | Doc |
+|---|---|---|
+| SBOM | Package inventory ≠ Golden Image identity | [SBOM](https://docs.jfrog.com/security/docs/sbom) |
+| Curation | Complementary ingest control; not Docker base-image lineage | [Curation](https://docs.jfrog.com/security/docs/curation-intro) |
+
+### CI authentication (GitHub Actions)
+
+| Topic | Why it matters here | Doc |
+|---|---|---|
+| JFrog OIDC | GitHub.com workflows without a long-lived token | [GitHub: OIDC Authentication](https://docs.jfrog.com/integrations/docs/github-actions-oidc-authentication), [OpenID Connect Integration](https://docs.jfrog.com/administration/docs/openid-connect-integration) |
+| `setup-jfrog-cli` | Action used by this lab; Evidence collection post-step | [jfrog/setup-jfrog-cli](https://github.com/jfrog/setup-jfrog-cli) |
+| GitHub’s JFrog OIDC guide | Claims JSON / identity mapping | [Configuring OpenID Connect in JFrog](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-jfrog) |
