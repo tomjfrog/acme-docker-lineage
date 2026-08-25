@@ -1,6 +1,6 @@
 # Acme Docker lineage
 
-Remotes: `origin` = full internal tree; `external` = stripped `public` branch (GitHub.com). Push `main` only to `origin`.
+Remotes: `origin` = full internal tree; `external` = stripped `public` branch (GitHub.com). Push `main` only to `origin`. Never merge `public` into `main`. To refresh GitHub.com: `git checkout public && git merge main`, re-`git rm` any restored spec/deck files, re-apply public README/FINDINGS tweaks if needed, then `git push external public:main`.
 
 Working notes and lab for **Golden Image lineage** on the JFrog Platform: what Artifactory can prove today (layer diffs), what to capture next (**Evidence** + **Build Info**), and how **AppTrust** can gate promote later.
 
