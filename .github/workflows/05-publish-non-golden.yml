@@ -1,4 +1,4 @@
-# Customer talking point: negative control — debian-based rogue-api is not
+# Negative control — debian-based rogue-api is not
 # derived from the golden catalog (no layer prefix, no lineage Evidence).
 name: 05 Publish non-golden
 

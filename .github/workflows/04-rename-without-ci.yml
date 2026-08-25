@@ -1,4 +1,4 @@
-# Customer talking point: rename without CI cooperation — same digests/layers,
+# Rename without CI cooperation — same digests/layers,
 # no Evidence on the new name; Tier 2 layer matching still finds golden.
 name: 04 Rename without CI metadata
 

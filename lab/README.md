@@ -50,7 +50,7 @@ Project `dockerlineage`, stage `dockerlineage-PreProd` **entry** gate in **block
 
 ## Images
 
-Lab image names (see [SPEC.md](../SPEC.md) for the original problem-statement aliases):
+Lab image names:
 
 | Image | Purpose |
 |---|---|

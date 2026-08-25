@@ -1,4 +1,4 @@
-# Customer talking point: build payments-api FROM golden and attach derived-from Evidence
+# Build payments-api FROM golden and attach derived-from Evidence
 # (Tier 1 explicit lineage that survives rename at the digest level).
 name: 02 Publish payments-api from golden
 

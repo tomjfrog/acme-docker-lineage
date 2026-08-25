@@ -1,4 +1,4 @@
-# Customer talking point: bootstrap the Evidence signing key (acme-lineage-lab)
+# Bootstrap the Evidence signing key (acme-lineage-lab)
 # so later publish steps can attach signed lineage attestations.
 name: 00 Setup Evidence keys
 

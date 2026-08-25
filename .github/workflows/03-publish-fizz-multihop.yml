@@ -1,4 +1,4 @@
-# Customer talking point: multi-hop Fizz FROM payments-api with immediate-parent-only
+# Multi-hop Fizz FROM payments-api with immediate-parent-only
 # Evidence — root-is-golden needs Evidence walk or layer-prefix (Tier 1+2).
 name: 03 Publish Fizz multi-hop
 

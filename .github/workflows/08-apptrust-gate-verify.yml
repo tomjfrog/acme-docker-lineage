@@ -1,4 +1,4 @@
-# Customer talking point: dry-run promote into dockerlineage-PreProd entry —
+# Dry-run promote into dockerlineage-PreProd entry —
 # payments-api with lineage Evidence PASSES; rogue-api without FAIL/blocks.
 name: 08 AppTrust gate verify
 

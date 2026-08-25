@@ -221,7 +221,7 @@ lab/
 
 **Registry path pattern:** `tomjpd2.jfrog.io/lineage-docker-local/<name>:<tag>`
 
-**Image chain exercised:** `golden-base` → `payments-api` → `fizz-service` (see SPEC.md for the original problem-statement aliases)
+**Image chain exercised:** `golden-base` → `payments-api` → `fizz-service`
 
 ---
 
@@ -360,22 +360,6 @@ When implementing:
 ### Cleanup note
 
 Legacy `uhg-*` image subjects and `uhg-lineage-*` builds were deleted. Trusted key was re-registered as `acme-lineage-lab` (same key material; old alias `uhg-lineage-lab` removed). A missing trusted-key alias previously made `jf evd create` fail with a misleading “subject not found” error.
-
----
-
-## Customer talking points
-
-For the full implementation roll-up, see **[Customer implementation checklist](#customer-implementation-checklist)** above.
-
-1. **Capability you want is lineage/provenance tracking**, not signing-first.
-2. JFrog natively contributes **Build Info**, **Evidence Collection** (incl. OCI/SLSA attestations), artifact properties, and content-addressed Docker storage for layer correlation; Xray adds SBOM/security context.
-3. **Rename does not erase lineage** at the digest/layer level.
-4. **Multi-hop** (child built from child) still needs root-is-golden proof: layer-prefix vs golden catalog, Evidence walk, or `root_golden_digest` in CI predicates — validated in lab run `20260817152017`.
-5. **DiffIDs scope the issue; they are not the product path.** Prefix matching proves ancestry is recoverable (incl. rename), but operationalizing it as the system of record is a large custom engineering program (catalog, scale, edge cases, no native promote gate, weaker audit). See [Why DiffID prefix is not the ideal primary solution](#why-diffid-prefix-is-not-the-ideal-primary-solution).
-6. **Start with Evidence today** (CI contract + queryable signed lineage) even if AppTrust is not licensed yet; use DiffID forensics only as a backstop for non-cooperating teams.
-7. **AppTrust later:** same derived-from Evidence feeds promote gates—no re-architecture. Detect images that “could / should have been” on golden via Tier 2 catalog matching + Tier 3 gates when available.
-8. **Tier 3 works:** AppTrust / Unified Policy can **block promote** into `dockerlineage-PreProd` unless derived-from lineage Evidence is on the application version’s packages — validated with `payments-api` (pass) vs `rogue-api` (fail).
-9. **CVS** addresses compliant *library* version selection — adjacent governance story for languages, not Docker base lineage.
 
 ---
 

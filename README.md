@@ -1,14 +1,12 @@
 # Acme Docker lineage
 
-Remotes: `origin` = full internal tree; `external` = stripped `public` branch (GitHub.com). Push `main` only to `origin`.
+Lab and findings for **Golden Image lineage** on the JFrog Platform: what Artifactory can prove today (layer diffs), what to capture next (**Evidence** + **Build Info**), and how **AppTrust** can gate promote later.
 
-Working notes and lab for **Golden Image lineage** on the JFrog Platform: what Artifactory can prove today (layer diffs), what to capture next (**Evidence** + **Build Info**), and how **AppTrust** can gate promote later.
-
-This is not a product that reports Golden Image compliance out of the box. The customer-facing answer is in [FINDINGS.md](FINDINGS.md). Slide copy lives in [DECK_SPEC.md](DECK_SPEC.md). The original ask is in [PROBLEM_STATEMENT.md](PROBLEM_STATEMENT.md) and [SPEC.md](SPEC.md).
+This is not a product that reports Golden Image compliance out of the box. The write-up is in [FINDINGS.md](FINDINGS.md).
 
 ## Documentation
 
-**Leave-behind (JFrog product docs for the customer):** the curated link list is in [FINDINGS.md — Documentation](FINDINGS.md#documentation-customer-leave-behind). Use that section in the deliverable; do not invent extra claims from the titles.
+Product docs used in this recommendation are listed in [FINDINGS.md — Documentation](FINDINGS.md#documentation-customer-leave-behind).
 
 **Reproduce the lab**
 

@@ -1,4 +1,4 @@
-# Customer talking point: publish the approved golden base (Foo) with Build Info
+# Publish the approved golden base with Build Info
 # and golden-base Evidence — the catalog termination set for lineage.
 name: 01 Publish golden
 

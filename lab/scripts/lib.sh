@@ -20,7 +20,7 @@ JF_URL="${JF_URL:-https://tomjpd2.jfrog.io}"
 DOCKER_REPO="${DOCKER_REPO:-lineage-docker-local}"
 REGISTRY_HOST="${REGISTRY_HOST:-tomjpd2.jfrog.io}"
 
-# Image names used in the lab (see SPEC.md for original problem-statement aliases):
+# Image names used in the lab:
 #   golden-base (APP base), payments-api (direct descendant), fizz-service (multi-hop)
 GOLDEN_NAME="${GOLDEN_NAME:-golden-base}"
 GOLDEN_TAG="${GOLDEN_TAG:-1.0.0}"
