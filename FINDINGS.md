@@ -70,6 +70,58 @@ items.find({
 
 `path` is `<image>/<tag>`. REST: `GET /artifactory/api/search/prop?repos=<repo>&docker.label.com.acme.image.golden=true`.
 
+**Send the AQL via REST** (`POST /artifactory/api/search/aql`, body = plain text, **not** JSON). Authenticated users only; anonymous is rejected. — [AQL query execution](https://docs.jfrog.com/artifactory/docs/aql-query-execution)
+
+Save the query (helps quoting):
+
+```bash
+cat > golden-label.aql <<'EOF'
+items.find({
+  "$and": [
+    {"repo": "<docker-local>"},
+    {"name": "manifest.json"},
+    {"type": "file"},
+    {"@docker.label.com.acme.image.golden": "true"}
+  ]
+}).include("repo", "path", "name")
+EOF
+```
+
+cURL (access token):
+
+```bash
+curl -sS -X POST \
+  -H "Authorization: Bearer <access-token>" \
+  -H "Content-Type: text/plain" \
+  --data-binary @golden-label.aql \
+  "https://<JFrogPlatformURL>/artifactory/api/search/aql"
+```
+
+cURL (username + password or username + identity token):
+
+```bash
+curl -sS -X POST \
+  -u "<username>:<password-or-identity-token>" \
+  -H "Content-Type: text/plain" \
+  --data-binary @golden-label.aql \
+  "https://<JFrogPlatformURL>/artifactory/api/search/aql"
+```
+
+wget (same endpoint and headers; `--body-file` is the query file):
+
+```bash
+wget -qO- \
+  --method=POST \
+  --header="Authorization: Bearer <access-token>" \
+  --header="Content-Type: text/plain" \
+  --body-file=golden-label.aql \
+  "https://<JFrogPlatformURL>/artifactory/api/search/aql"
+```
+
+Any REST client (Postman, Insomnia, HTTPie): **POST**, URL `https://<host>/artifactory/api/search/aql`, header `Content-Type: text/plain`, body = the AQL string (raw, not a JSON `{"query":...}` envelope). Optional `?compact=true` minifies the JSON. Response is `{"results":[...],"range":{...}}`.
+
+If the CLI is already configured: `jf rt curl --server-id <id> -XPOST -H "Content-Type: text/plain" -d @golden-label.aql /api/search/aql` (or `jf api /artifactory/api/search/aql -X POST …`).
+
 **Lab-validated on `tomjpd2` / `lineage-docker-local`:** AQL for `@docker.label.com.acme.image.golden=true` hit `golden-base/1.0.0`, `payments-api/2.0.0` (direct child), `fizz-service/0.1.0` (multi-hop; Fizz never set that key), and `billing-service/9.9.9` (rename of payments-api). **Miss:** `rogue-api/1.0.0` (debian). Child labels that **override** the same key (`title`, `role`) are not inherited.
 
 **Artifact properties do not cascade.** Lab `jf rt set-props` `golden.image=true` is only on the golden path; descendants were set to `golden.image=false`. Searching `@golden.image=true` returns the golden image only. Do not conflate that overlay with OCI `docker.label.*`.
@@ -430,7 +482,7 @@ Public JFrog docs for the capabilities in this recommendation. Share this list w
 | Remote / virtual repos | Pull-through cache is **path of the cached artifact**, not derived-image lineage | [Remote Repositories](https://docs.jfrog.com/artifactory/docs/remote-repositories), [Virtual Repositories](https://docs.jfrog.com/artifactory/docs/virtual-repositories) |
 | `jf docker` | Build, push, scan with CLI; `--build-name` / `--build-number` | [Use Docker with JFrog CLI](https://docs.jfrog.com/artifactory/docs/jf-docker) |
 | Artifact properties | Operational overlay (e.g. `golden.image=true` on the golden path); **does not cascade** to descendants | [JFrog Properties](https://docs.jfrog.com/artifactory/docs/jfrog-properties) |
-| AQL | Search inherited OCI labels as `@docker.label.<key>` on `manifest.json`; also packages/builds by digest | [Artifactory Query Language](https://docs.jfrog.com/artifactory/docs/artifactory-query-language), [AQL search criteria](https://docs.jfrog.com/artifactory/docs/aql-search-criteria), [Property Search REST](https://docs.jfrog.com/artifactory/reference/searchproperty) |
+| AQL | Search inherited OCI labels as `@docker.label.<key>` on `manifest.json`; also packages/builds by digest | [Artifactory Query Language](https://docs.jfrog.com/artifactory/docs/artifactory-query-language), [AQL search criteria](https://docs.jfrog.com/artifactory/docs/aql-search-criteria), [AQL query execution](https://docs.jfrog.com/artifactory/docs/aql-query-execution) (`POST …/api/search/aql`, `text/plain`), [Property Search REST](https://docs.jfrog.com/artifactory/reference/searchproperty) |
 | Stored Packages GraphQL | Package/version inventory; **cannot** filter by OCI `LABEL` | [Stored Packages OneModel GraphQL](https://docs.jfrog.com/integrations/docs/stored-packages-onemodel-graphql) |
 
 ### Build Info (MVP — CI publish)
