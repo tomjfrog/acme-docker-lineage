@@ -328,6 +328,23 @@ Secondary caption under the label (italic, `--text-secondary`):
 
 ---
 
+## Customer talking points
+
+Speaker / Q&A bank from `FINDINGS.md`. **Not extra slides.** Do not add a talking-points slide; do not put CVS on a slide. Implementation roll-up: **FINDINGS.md → Customer implementation checklist**.
+
+1. **Capability you want is lineage/provenance tracking**, not signing-first.
+2. JFrog natively contributes **Build Info**, **Evidence Collection** (incl. OCI/SLSA attestations), artifact properties, and content-addressed Docker storage for layer correlation; Xray adds SBOM/security context.
+3. **Rename does not erase lineage** at the digest/layer level.
+4. **Multi-hop** (child built from child) still needs root-is-golden proof: layer-prefix vs golden catalog, Evidence walk, or `root_golden_digest` in CI predicates — validated in lab run `20260817152017`.
+5. **DiffIDs scope the issue; they are not the product path.** Prefix matching proves ancestry is recoverable (incl. rename), but operationalizing it as the system of record is a large custom engineering program (catalog, scale, edge cases, no native promote gate, weaker audit). See FINDINGS.md [Why DiffID prefix is not the ideal primary solution](FINDINGS.md#why-diffid-prefix-is-not-the-ideal-primary-solution).
+6. **Start with Evidence today** (CI contract + queryable signed lineage) even if AppTrust is not licensed yet; use DiffID forensics only as a backstop for non-cooperating teams.
+7. **AppTrust later:** same derived-from Evidence feeds promote gates—no re-architecture. Detect images that “could / should have been” on golden via Tier 2 catalog matching + Tier 3 gates when available.
+8. **Tier 3 works:** AppTrust / Unified Policy can **block promote** into `dockerlineage-PreProd` unless derived-from lineage Evidence is on the application version’s packages — validated with `payments-api` (pass) vs `rogue-api` (fail).
+9. **CVS** (verbal only if asked): addresses compliant *library* version selection — adjacent governance story for languages, not Docker base lineage.
+10. **Golden `LABEL`s are searchable today:** Artifactory copies inherited OCI labels to `docker.label.*` on each descendant `manifest.json`. AQL (not Stored Packages GraphQL) inventories golden + children + multi-hop + rename; non-golden misses. Layer squash does not break this; scratch/`COPY --from` does. See FINDINGS.md [OCI golden-marker labels](FINDINGS.md#oci-golden-marker-labels--searchable-today).
+
+---
+
 ## Implementation notes for the subagent
 
 1. Read this spec. Treat `PROBLEM_STATEMENT.md` as background for the *speaker*, not slide copy. Do not put the Golden Image explainer on a slide.
@@ -336,4 +353,4 @@ Secondary caption under the label (italic, `--text-secondary`):
 4. Keep titles exactly as specified unless a character limit in the template requires a trivial trim.
 5. Deliver: deck URL or file path, plus a one-line confirmation of slide count.
 6. Do not add an agenda slide, a problem-statement recap, a “why JFrog” slide, or a CVS slide.
-7. Do not add a documentation slide. If the customer asks for links after the meeting, point them to **FINDINGS.md → Documentation (customer leave-behind)** (same list as the repo root README).
+7. Do not add a documentation slide. If the customer asks for links after the meeting, point them to **FINDINGS.md → Documentation (customer leave-behind)** (same list as the repo root README). Use [Customer talking points](#customer-talking-points) for verbal answers only.
