@@ -163,7 +163,7 @@ jobs:
 
           MATERIALS="$(printf '%s' "${PROVENANCE}" | jq -r '
             [
-              .. | objects | .materials? | arrays | .[]
+              .. | objects | ((.materials // empty), (.resolvedDependencies // empty)) | arrays | .[]
               | (.digest.sha256 // empty | if . != "" then "sha256:" + . else empty end),
                 (if (.digest | type) == "string" then .digest else empty end)
             ] | map(select(. != null and . != "")) | unique | .[]

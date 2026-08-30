@@ -160,7 +160,7 @@ Native GitHub Actions for this lab now push **OCI indexes** (`platforms: linux/a
 
 Native workflow **02** does **not** look up a golden digest before `FROM`. The payments image is built and pushed with `FROM golden-base:1.0.0` **by tag**. Derived-from Evidence is attached **only after** a post-push check: BuildKit SLSA `materials` on the published tag vs the **current** golden catalog. That is not a gate — a non-match logs a warning and the job still succeeds.
 
-GitHub `attest-build-provenance` records workflow→image (git/builder), not Docker `FROM`. The vet reads **BuildKit** provenance (`docker buildx imagetools inspect --format '{{json .Provenance}}'`). `FROM` a multi-arch tag records **platform** digests in `materials`, not the golden **index** digest. A match is any material digest equal to the golden index **or** a `linux/*` descriptor in that index (skip `unknown/unknown` attestation manifests). On match, `jf evd create` still cites the golden **index** as `base_image_digest`.
+GitHub `attest-build-provenance` records workflow→image (git/builder), not Docker `FROM`. The vet reads **BuildKit** provenance (`docker buildx imagetools inspect --format '{{json .Provenance}}'`). Current Buildx on GHA emits **SLSA v1** (`buildDefinition.resolvedDependencies`), not v0.2 `materials`. `FROM` a multi-arch tag may record the golden **index** digest or a **platform** digest; a match is any of those equal to the golden index **or** a `linux/*` descriptor (skip `unknown/unknown` attestation manifests). On match, `jf evd create` cites the golden **index** as `base_image_digest`.
 
 ---
 
