@@ -9,25 +9,230 @@ on:
 permissions:
   id-token: write
   contents: read
+  attestations: write
 
 jobs:
   publish-payments-api:
     runs-on: ubuntu-latest
     env:
-      JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
-      EVIDENCE_SIGNING_KEY: ${{ secrets.EVIDENCE_SIGNING_KEY }}
       JF_URL: ${{ vars.JF_URL }}
       JF_DOCKER_REGISTRY: ${{ vars.JF_DOCKER_REGISTRY }}
+      DOCKER_REPO: lineage-docker-local
+      GOLDEN_NAME: golden-base
+      GOLDEN_TAG: 1.0.0
+      APP_NAME: payments-api
+      APP_TAG: 2.0.0
+      BUILD_NAME: acme-lineage-app
+      KEY_ALIAS: acme-lineage-lab
+      PREDICATE_TYPE_LINEAGE: https://jfrog.com/evidence/acme-docker-lineage/derived-from/v1
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup lab
-        uses: ./.github/actions/setup-lab
-        with:
-          jf_url: ${{ env.JF_URL }}
-          docker_registry: ${{ env.JF_DOCKER_REGISTRY }}
-          oidc_provider_name: ${{ secrets.OIDC_PROVIDER_NAME }}
-          image_tag: "2.0.0"
+      - name: Set job env
+        run: |
+          set -euo pipefail
+          GOLDEN="${JF_DOCKER_REGISTRY}/${DOCKER_REPO}/${GOLDEN_NAME}:${GOLDEN_TAG}"
+          APP="${JF_DOCKER_REGISTRY}/${DOCKER_REPO}/${APP_NAME}:${APP_TAG}"
+          BNUM="${GITHUB_RUN_NUMBER}-${APP_TAG}"
+          {
+            echo "BUILD_NUM=${BNUM}"
+            echo "CI=true"
+            echo "GOLDEN_IMAGE=${GOLDEN}"
+            echo "APP_IMAGE=${APP}"
+            echo "OUT_DIR=lab/out/${GITHUB_RUN_NUMBER}"
+          } >> "${GITHUB_ENV}"
+          echo "Resolved BUILD_NUM=${BNUM} golden=${GOLDEN} app=${APP}"
 
-      - name: Publish payments-api
-        run: ./lab/scripts/steps/publish-payments-api.sh
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Setup JFrog CLI (OIDC)
+        if: ${{ !env.ACT }}
+        id: setup-jfrog-cli
+        uses: jfrog/setup-jfrog-cli@v4
+        env:
+          JF_URL: ${{ env.JF_URL }}
+        with:
+          version: 2.120.0
+          oidc-provider-name: ${{ secrets.OIDC_PROVIDER_NAME }}
+
+      # JF_ACCESS_TOKEN stays scoped to this step: at job level it would override
+      # the OIDC exchange and break the post-job Evidence collection.
+      - name: Setup JFrog CLI (access token)
+        if: ${{ env.ACT }}
+        uses: jfrog/setup-jfrog-cli@v4
+        env:
+          JF_URL: ${{ env.JF_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+        with:
+          version: 2.120.0
+
+      - name: Docker login to Artifactory (OIDC)
+        if: ${{ !env.ACT }}
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.JF_DOCKER_REGISTRY }}
+          username: ${{ steps.setup-jfrog-cli.outputs.oidc-user }}
+          password: ${{ steps.setup-jfrog-cli.outputs.oidc-token }}
+
+      - name: Docker login to Artifactory (act)
+        if: ${{ env.ACT }}
+        run: jf docker login "${JF_DOCKER_REGISTRY}"
+
+      - name: Resolve golden index digest from catalog
+        run: |
+          set -euo pipefail
+          if ! GOLDEN_DIGEST="$(docker buildx imagetools inspect --format '{{.Digest}}' "${GOLDEN_IMAGE}" 2>/dev/null)" \
+            || [[ -z "${GOLDEN_DIGEST}" || "${GOLDEN_DIGEST}" == "<no value>" ]]; then
+            GOLDEN_DIGEST="$(docker buildx imagetools inspect "${GOLDEN_IMAGE}" | awk '/^Digest:/{print $2; exit}')"
+          fi
+          if [[ -z "${GOLDEN_DIGEST}" ]]; then
+            echo "::error::Could not resolve index digest for ${GOLDEN_IMAGE}. Dispatch 01 Publish golden first."
+            exit 1
+          fi
+          echo "GOLDEN_DIGEST=${GOLDEN_DIGEST}" >> "${GITHUB_ENV}"
+          echo "Resolved golden index digest=${GOLDEN_DIGEST}"
+
+      - name: Build and push payments-api (multi-arch)
+        id: build-and-push
+        uses: docker/build-push-action@v7
+        with:
+          context: lab/app-from-golden
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ env.APP_IMAGE }}
+          build-args: |
+            GOLDEN_IMAGE=${{ env.GOLDEN_IMAGE }}
+
+      - name: Record index digest
+        run: |
+          set -euo pipefail
+          echo "APP_DIGEST=${{ steps.build-and-push.outputs.digest }}" >> "${GITHUB_ENV}"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: oci://${{ env.JF_DOCKER_REGISTRY }}/${{ env.DOCKER_REPO }}/${{ env.APP_NAME }}
+          subject-digest: ${{ steps.build-and-push.outputs.digest }}
+
+      - name: Write Evidence signing key
+        env:
+          EVIDENCE_SIGNING_KEY: ${{ secrets.EVIDENCE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          KEY_FILE="${RUNNER_TEMP}/evidence.key"
+          if [[ -z "${EVIDENCE_SIGNING_KEY}" ]]; then
+            echo "::error::EVIDENCE_SIGNING_KEY repository secret is required"
+            exit 1
+          fi
+          if printf '%s' "${EVIDENCE_SIGNING_KEY}" | grep -q "BEGIN"; then
+            printf '%s\n' "${EVIDENCE_SIGNING_KEY}" > "${KEY_FILE}"
+          else
+            printf '%s' "${EVIDENCE_SIGNING_KEY}" | base64 --decode > "${KEY_FILE}"
+          fi
+          chmod 600 "${KEY_FILE}"
+          echo "EVIDENCE_KEY_FILE=${KEY_FILE}" >> "${GITHUB_ENV}"
+
+      - name: Publish JFrog Build Info
+        run: |
+          set -euo pipefail
+          IMAGE_FILE="${RUNNER_TEMP}/payments-api-image-file.json"
+          jq -n --arg image "${APP_IMAGE}@${APP_DIGEST}" '{image: $image}' > "${IMAGE_FILE}"
+          cat "${IMAGE_FILE}"
+          jf rt build-docker-create "${DOCKER_REPO}" \
+            --image-file "${IMAGE_FILE}" \
+            --build-name "${BUILD_NAME}" \
+            --build-number "${BUILD_NUM}"
+          jf rt build-collect-env "${BUILD_NAME}" "${BUILD_NUM}" || true
+          jf rt build-publish "${BUILD_NAME}" "${BUILD_NUM}"
+
+      - name: Set payments-api properties
+        run: |
+          set -euo pipefail
+          jf rt set-props \
+            "${DOCKER_REPO}/${APP_NAME}/${APP_TAG}/" \
+            "golden.image=false;com.acme.image.role=app;com.acme.expected.base=golden;com.acme.lineage.lab=true;com.acme.base.digest=${GOLDEN_DIGEST}"
+
+      - name: Capture lineage artifacts (amd64 layers)
+        run: |
+          set -euo pipefail
+          RUN_DIR="${OUT_DIR}"
+          mkdir -p "${RUN_DIR}"
+          docker pull --platform linux/amd64 "${APP_IMAGE}"
+          PLATFORM_DIGEST="$(docker image inspect --format '{{index .RepoDigests 0}}' "${APP_IMAGE}" | sed -E 's/.*@//')"
+          docker image inspect --format '{{json .RootFS.Layers}}' "${APP_IMAGE}" | jq -r '.[]' > "${RUN_DIR}/app.layers.txt"
+          printf '%s\n' "${APP_DIGEST}" > "${RUN_DIR}/app.digest.txt"
+          printf '%s\n' "${PLATFORM_DIGEST}" > "${RUN_DIR}/app.amd64.digest.txt"
+          printf '%s\n' "${APP_IMAGE}" > "${RUN_DIR}/app.ref.txt"
+          printf '%s\n' "${GOLDEN_DIGEST}" > "${RUN_DIR}/golden.digest.txt"
+          printf '%s\n' "${GOLDEN_IMAGE}" > "${RUN_DIR}/golden.ref.txt"
+          echo "PLATFORM_DIGEST=${PLATFORM_DIGEST}" >> "${GITHUB_ENV}"
+          echo "RUN_DIR=${RUN_DIR}" >> "${GITHUB_ENV}"
+
+      - name: Attach derived-from Evidence
+        run: |
+          set -euo pipefail
+          PREDICATE="${RUN_DIR}/app-lineage-evidence.json"
+          jq -n \
+            --arg image_ref "${APP_IMAGE}" \
+            --arg image_digest "${APP_DIGEST}" \
+            --arg base_image_ref "${GOLDEN_IMAGE}" \
+            --arg base_image_digest "${GOLDEN_DIGEST}" \
+            --arg base_package_name "${GOLDEN_NAME}" \
+            --arg base_package_version "${GOLDEN_TAG}" \
+            --arg build_name "${BUILD_NAME}" \
+            --arg build_number "${BUILD_NUM}" \
+            --arg created_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+            '{
+              role: "derived-image",
+              image_ref: $image_ref,
+              image_digest: $image_digest,
+              base_image_ref: $base_image_ref,
+              base_image_digest: $base_image_digest,
+              base_package_name: $base_package_name,
+              base_package_version: $base_package_version,
+              derived_from_golden: true,
+              lab: "acme-docker-lineage",
+              build_name: $build_name,
+              build_number: $build_number,
+              created_at: $created_at
+            }' > "${PREDICATE}"
+          OUT="${RUN_DIR}/app-evidence-create.json"
+          if jf evd create \
+            --package-name "${APP_NAME}" \
+            --package-version "${APP_TAG}" \
+            --package-repo-name "${DOCKER_REPO}" \
+            --predicate "${PREDICATE}" \
+            --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
+            --key "${EVIDENCE_KEY_FILE}" \
+            --key-alias "${KEY_ALIAS}" \
+            | tee "${OUT}"; then
+            echo "Package-scoped derived-from Evidence attached"
+          elif jf evd create \
+            --subject-repo-path "${DOCKER_REPO}/${APP_NAME}/${APP_TAG}/list.manifest.json" \
+            --predicate "${PREDICATE}" \
+            --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
+            --key "${EVIDENCE_KEY_FILE}" \
+            --key-alias "${KEY_ALIAS}" \
+            | tee "${OUT}"; then
+            echo "Subject-path Evidence attached (list.manifest.json)"
+          else
+            jf evd create \
+              --subject-repo-path "${DOCKER_REPO}/${APP_NAME}/${APP_TAG}/manifest.json" \
+              --predicate "${PREDICATE}" \
+              --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
+              --key "${EVIDENCE_KEY_FILE}" \
+              --key-alias "${KEY_ALIAS}" \
+              | tee "${OUT}"
+          fi
+
+      - name: Upload this-run logs
+        if: ${{ !env.ACT }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: payments-api-${{ github.run_number }}-${{ env.APP_TAG }}
+          path: ${{ env.OUT_DIR }}/
+          if-no-files-found: warn
