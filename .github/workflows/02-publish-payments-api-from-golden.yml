@@ -85,12 +85,12 @@ jobs:
       - name: Resolve golden index digest from catalog
         run: |
           set -euo pipefail
-          if ! GOLDEN_DIGEST="$(docker buildx imagetools inspect --format '{{.Digest}}' "${GOLDEN_IMAGE}" 2>/dev/null)" \
-            || [[ -z "${GOLDEN_DIGEST}" || "${GOLDEN_DIGEST}" == "<no value>" ]]; then
-            GOLDEN_DIGEST="$(docker buildx imagetools inspect "${GOLDEN_IMAGE}" | awk '/^Digest:/{print $2; exit}')"
+          if ! GOLDEN_DIGEST="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "${GOLDEN_IMAGE}")"; then
+            echo "::error::Could not inspect ${GOLDEN_IMAGE}. Dispatch 01 Publish golden first."
+            exit 1
           fi
           if [[ -z "${GOLDEN_DIGEST}" ]]; then
-            echo "::error::Could not resolve index digest for ${GOLDEN_IMAGE}. Dispatch 01 Publish golden first."
+            echo "::error::Empty index digest for ${GOLDEN_IMAGE}"
             exit 1
           fi
           echo "GOLDEN_DIGEST=${GOLDEN_DIGEST}" >> "${GITHUB_ENV}"
