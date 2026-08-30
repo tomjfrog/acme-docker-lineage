@@ -1,15 +1,10 @@
 # Customer talking point: forensic + Evidence detector — layer DiffID prefix,
 # Evidence walk to golden, Build Info join (Tier 1+2 verdicts).
+# Pulls stable tags from the catalog — does not chain GitHub run ids.
 name: 06 Detect lineage
 
 on:
   workflow_dispatch:
-    inputs:
-      run_id:
-        description: Run id whose lab/out artifacts to analyze (optional if detector can rebuild locally)
-        required: false
-        type: string
-        default: ""
 
 permissions:
   id-token: write
@@ -21,25 +16,17 @@ jobs:
     env:
       JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
       EVIDENCE_SIGNING_KEY: ${{ secrets.EVIDENCE_SIGNING_KEY }}
-      JF_URL: ${{ vars.JF_URL || 'https://tomjpd2.jfrog.io' }}
+      JF_URL: ${{ vars.JF_URL }}
+      JF_DOCKER_REGISTRY: ${{ vars.JF_DOCKER_REGISTRY }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Download prior run artifacts
-        if: inputs.run_id != ''
-        uses: actions/download-artifact@v4
-        with:
-          name: lineage-run-${{ inputs.run_id }}
-          path: lab/out/${{ inputs.run_id }}/
-        continue-on-error: true
 
       - name: Setup lab
         uses: ./.github/actions/setup-lab
         with:
-          run_id: ${{ inputs.run_id }}
           jf_url: ${{ env.JF_URL }}
+          docker_registry: ${{ env.JF_DOCKER_REGISTRY }}
           oidc_provider_name: ${{ secrets.OIDC_PROVIDER_NAME }}
-          oidc_audience: ${{ secrets.OIDC_AUDIENCE }}
           write_evidence_key: "false"
 
       - name: Pull images for layer DiffID matching
@@ -76,7 +63,7 @@ jobs:
         if: ${{ !env.ACT }}
         uses: actions/upload-artifact@v4
         with:
-          name: lineage-report-${{ env.RUN_ID }}
+          name: lineage-report-${{ github.run_number }}
           path: |
             lab/out/${{ env.RUN_ID }}/lineage-report.md
             lab/out/${{ env.RUN_ID }}/lineage-results.json

@@ -5,11 +5,6 @@ name: 08 AppTrust gate verify
 on:
   workflow_dispatch:
     inputs:
-      run_id:
-        description: Optional run id for logging
-        required: false
-        type: string
-        default: ""
       app_version:
         description: AppTrust version for payments-api (must exist from 07)
         required: false
@@ -31,7 +26,8 @@ jobs:
     env:
       JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
       EVIDENCE_SIGNING_KEY: ${{ secrets.EVIDENCE_SIGNING_KEY }}
-      JF_URL: ${{ vars.JF_URL || 'https://tomjpd2.jfrog.io' }}
+      JF_URL: ${{ vars.JF_URL }}
+      JF_DOCKER_REGISTRY: ${{ vars.JF_DOCKER_REGISTRY }}
       APP_VERSION: ${{ inputs.app_version }}
       NEG_APP_VERSION: ${{ inputs.neg_app_version }}
     steps:
@@ -40,10 +36,9 @@ jobs:
       - name: Setup lab
         uses: ./.github/actions/setup-lab
         with:
-          run_id: ${{ inputs.run_id }}
           jf_url: ${{ env.JF_URL }}
+          docker_registry: ${{ env.JF_DOCKER_REGISTRY }}
           oidc_provider_name: ${{ secrets.OIDC_PROVIDER_NAME }}
-          oidc_audience: ${{ secrets.OIDC_AUDIENCE }}
           write_evidence_key: "false"
 
       - name: Verify PreProd entry gate (pass + fail)
