@@ -3,24 +3,22 @@ description: >-
   Configure JFrog CLI (OIDC on GitHub.com, or JF_ACCESS_TOKEN for act),
   restore Evidence signing key, and docker-login to the lab registry.
 inputs:
-  run_id:
-    description: Lab run id / build number for artifact chaining
+  image_tag:
+    description: Stable image tag included in JFrog BUILD_NUM (run_number-tag)
     required: false
     default: ""
+  docker_registry:
+    description: Artifactory Docker registry host (no scheme)
+    required: true
   jf_url:
     description: JFrog Platform URL (no trailing slash)
-    required: false
-    default: "https://tomjpd2.jfrog.io"
+    required: true
   server_id:
     description: JFrog CLI server id
     required: false
     default: "tomjpd2"
   oidc_provider_name:
-    description: OIDC provider name (used when JF_ACCESS_TOKEN is unset)
-    required: false
-    default: ""
-  oidc_audience:
-    description: OIDC audience (used when JF_ACCESS_TOKEN is unset)
+    description: OIDC provider name (GitHub.com only; act uses JF_ACCESS_TOKEN)
     required: false
     default: ""
   write_evidence_key:
@@ -34,22 +32,25 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        RID="${{ inputs.run_id }}"
-        if [[ -z "${RID}" ]]; then
-          RID="${GITHUB_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
+        RID="${GITHUB_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
+        TAG="${{ inputs.image_tag }}"
+        if [[ -n "${TAG}" ]]; then
+          BNUM="${GITHUB_RUN_NUMBER:-0}-${TAG}"
+        else
+          BNUM="${GITHUB_RUN_NUMBER:-0}"
         fi
         {
           echo "RUN_ID=${RID}"
-          echo "BUILD_NUM=${RID}"
+          echo "BUILD_NUM=${BNUM}"
           echo "CI=true"
           echo "SERVER_ID=${{ inputs.server_id }}"
           echo "JF_URL=${{ inputs.jf_url }}"
-          echo "REGISTRY_HOST=$(echo '${{ inputs.jf_url }}' | sed -E 's|https?://||;s|/.*||')"
+          echo "REGISTRY_HOST=${{ inputs.docker_registry }}"
         } >> "${GITHUB_ENV}"
-        echo "Resolved RUN_ID=${RID}"
+        echo "Resolved BUILD_NUM=${BNUM} (catalog jobs do not chain GitHub run ids)"
 
     - name: Setup JFrog CLI (access token)
-      if: env.JF_ACCESS_TOKEN != ''
+      if: ${{ env.ACT }}
       uses: jfrog/setup-jfrog-cli@v4
       env:
         JF_URL: ${{ inputs.jf_url }}
@@ -60,14 +61,13 @@ runs:
         custom-server-id: ${{ inputs.server_id }}
 
     - name: Setup JFrog CLI (OIDC)
-      if: env.JF_ACCESS_TOKEN == ''
+      if: ${{ !env.ACT }}
       uses: jfrog/setup-jfrog-cli@v4
       env:
         JF_URL: ${{ inputs.jf_url }}
       with:
         version: 2.120.0
         oidc-provider-name: ${{ inputs.oidc_provider_name }}
-        oidc-audience: ${{ inputs.oidc_audience }}
         custom-server-id: ${{ inputs.server_id }}
 
     - name: Point lab scripts at configured server
