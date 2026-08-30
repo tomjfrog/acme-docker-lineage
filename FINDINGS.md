@@ -29,7 +29,7 @@ Signing is useful for **integrity** of attestations; it is not required to answe
 | OCI / Docker **layer digests** (manifest `layers[].digest`) | Yes | Heuristic: golden layer chain is a **prefix** of child | Best *passive* signal; fails on squash, rebase, or `FROM scratch` + copy |
 | OCI config `history` / `docker history` | Yes (in config blob) | Weak | Records build commands, not `repo/name:tag` of the base |
 | **Build Info** (`jf docker push --build-name/--build-number` + `jf rt build-publish`) | Yes (digest-tied) | Strong **if** base collected as dependency / CI records it | Bare `docker push` without CLI build-info flags yields little lineage |
-| **Evidence** / SLSA / OCI attestations (`jf evd create`, cosign, GHA attest → Evidence Collection) | Yes | Strong when predicate lists base digest | Best *explicit* provenance; external evidence needs Enterprise+ |
+| **Evidence** / SLSA / OCI attestations (`jf evd create`, cosign, GHA attest → Evidence Collection) | Yes | Strong when predicate lists base digest | Best *explicit* provenance; external evidence needs Enterprise+. On a **multi-arch tag**, package-scoped `jf evd create` and GHA attestations bind to the **index** (`list.manifest.json`), not each platform `manifest.json` — see [Multi-arch Evidence](#multi-arch-evidence-index-vs-platform-manifests) |
 | **Xray SBOM** (`jf docker scan --sbom`, component graph) | Yes | Weak / indirect | Package inventory ≠ base image identity |
 | Artifact **properties** set in CI (`jf rt set-props`) | Yes if set on digest | Only if CI sets them on **every** image | Do **not** cascade to descendants; lab `golden.image=true` stays on the golden path only |
 | OCI **`LABEL`s** on the golden image (`config.Labels`) | Yes (in child config) | **Yes, if inherited** — Artifactory copies them to `docker.label.*` on each descendant `manifest.json` | Searchable **today** with AQL / property search. Docker inherits labels on `FROM`. Layer squash does **not** strip them; `FROM scratch` + `COPY --from` does |
@@ -137,6 +137,24 @@ If the CLI is already configured: `jf rt curl --server-id <id> -XPOST -H "Conten
 | `docker export` / `import` | **No** |
 
 Position as **inventory of images whose published config still carries the golden marker**, not as signed provenance. Keep Evidence / DiffIDs for audit and forensics.
+
+### Multi-arch Evidence: index vs platform manifests
+
+Native GitHub Actions for this lab now push **OCI indexes** (`platforms: linux/amd64,linux/arm64`). Package-scoped `jf evd create` (`--package-name` / `--package-version` / `--package-repo-name`) and GitHub `attest-build-provenance` both bind to **one** subject: Artifactory’s Docker **lead artifact** for that tag, which is `list.manifest.json` (the index). Evidence does **not** fan out to each architecture’s `manifest.json`. Each evidence file has a single subject — [Create Evidence CLI](https://docs.jfrog.com/governance/docs/create-evidence-cli).
+
+**Lab-validated (`tomjpd2` / `payments-api:2.0.0` after native workflow 02):** derived-from (`…/derived-from/v1`) and SLSA provenance (`https://slsa.dev/provenance/v1`) are on `payments-api/2.0.0/list.manifest.json`. Older single-arch publishes still have derived-from on the tag-folder `manifest.json` (a leftover blob, not the linux/amd64 or linux/arm64 members of the index).
+
+**Default recommendation:** attach lineage Evidence to the **package / index**. That is the subject consumers of `name:tag` and AppTrust Docker packages actually pull. Query GraphQL / Evidence UI with `name: list.manifest.json` (or package version), not only `manifest.json`. AQL inventory of OCI labels still uses `name: manifest.json` because `docker.label.*` is copied onto **per-arch** manifests — do not conflate those two searches.
+
+**Shortcomings of index-only Evidence**
+
+- Pull-by-digest of one platform (`image@sha256:<amd64>`) never sees the index; Evidence on `list.manifest.json` is invisible on that platform subject.
+- Catalog copy/rename of a **single** arch digest does not carry index Evidence (same as rename of a tag: Evidence does not auto-copy).
+- Promote/evidence gates that evaluate the **file** being promoted (a `sha256__…/manifest.json`) may miss package/index Evidence unless the policy walks the Docker package / lead artifact.
+- Layer-prefix forensics still compare **same-OS/arch** manifests, not the index digest. An index-level predicate that cites the parent **index** digest is a tag-level claim (“built FROM golden:1.0.0”), not a DiffID-prefix claim.
+- Skip `unknown/unknown` Buildx attestation manifests when enumerating index members.
+
+**Optional extra:** stamp the same predicate on each real platform with `jf evd create --subject-repo-path <repo>/<image>/sha256__<hex>/manifest.json` (and `--subject-sha256`). Include `platform` and the **matching golden platform digest** in the predicate if the claim is layer lineage. Keep the index record as the tag-level system of record.
 
 ---
 
@@ -250,7 +268,7 @@ Bare `docker push` with no Build Info / Evidence leaves verification dependent o
 
 **A. Explicit (Tier 1) — preferred for audit / promote**
 
-- Query Evidence by package path and/or **subject digest**.
+- Query Evidence by package path and/or **subject digest**. For multi-arch tags the package subject is typically `list.manifest.json`; a GraphQL search on `manifest.json` only will miss it.
 - For multi-hop: **walk** parent digests/package coords until golden catalog hit, **or** require `root_golden_digest` on every hop.
 - Prefer digest-keyed Evidence queries so **rename** does not orphan provenance (Evidence does not auto-copy to a new tag).
 - When multiple Evidence records exist on one path, prefer the predicate matching the current image digest (or newest `createdAt`).
@@ -406,7 +424,7 @@ Layer DiffIDs observed (`20260817152017`):
 ### Limitations observed
 
 - Squash / rebase / multi-stage final stages that do not retain base layers break **Tier 2 DiffID prefix** → rely on Tier 1 Evidence. Classic layer squash does **not** strip inherited OCI labels; `FROM scratch` + `COPY --from` does.
-- Evidence attached to a package subject path (`…/list.manifest.json` for OCI index / BuildKit) does **not** automatically appear on a renamed tag; query by **digest** or re-attach. Layer matching still works without Evidence.
+- Evidence attached to a package subject path (`…/list.manifest.json` for an OCI index) does **not** automatically appear on a renamed tag, a copied platform digest, or each member `manifest.json`. Query the index / package, query by **digest**, or re-attach. Layer matching still works without Evidence. See [Multi-arch Evidence](#multi-arch-evidence-index-vs-platform-manifests).
 - Multi-hop Evidence that records **only** the immediate parent requires a **walk** (or an explicit `root_golden_digest`) to answer “is the root golden?”
 - Multiple Evidence records can accumulate on the same package path across lab re-runs; tooling should prefer the predicate matching the current image digest (or newest `createdAt`).
 - `jf docker push --build-name` may warn “No layer(s) was found” when the local image is an OCI index with attestations; Build Info still publishes. Lab sets `BUILDX_NO_DEFAULT_ATTESTATIONS=1` for cleaner demos; provenance is supplied via `jf evd create`.
@@ -498,7 +516,7 @@ Public JFrog docs for the capabilities in this recommendation. Share this list w
 |---|---|---|
 | Evidence Collection | System of record for derived-from claims | [Evidence Management](https://docs.jfrog.com/governance/docs/evidence-management), [Evidence Quickstart](https://docs.jfrog.com/governance/docs/evidence-quick-start) |
 | Setup and keys | Org signing keys before `jf evd create` | [Evidence Setup](https://docs.jfrog.com/governance/docs/evidence-setup), [Create a Key Pair](https://docs.jfrog.com/governance/docs/create-a-key-pair-for-evidence), [Upload public key](https://docs.jfrog.com/governance/docs/upload-the-public-key-to-artifactory) |
-| Create / CLI | Attach predicate (child digest, base, optional `root_golden_digest`) | [Create Evidence](https://docs.jfrog.com/governance/docs/create-evidence), [Create Evidence using JFrog CLI](https://docs.jfrog.com/governance/docs/create-evidence-using-the-jfrog-cli), [Evidence Service CLI](https://docs.jfrog.com/governance/docs/evidence-service-cli) |
+| Create / CLI | Attach predicate (child digest, base, optional `root_golden_digest`). Package-scoped create resolves **one** lead artifact (Docker: `list.manifest.json` for a multi-arch tag); per-arch needs `--subject-repo-path` | [Create Evidence](https://docs.jfrog.com/governance/docs/create-evidence), [Create Evidence using JFrog CLI](https://docs.jfrog.com/governance/docs/create-evidence-using-the-jfrog-cli), [Create Evidence CLI](https://docs.jfrog.com/governance/docs/create-evidence-cli), [Evidence Service CLI](https://docs.jfrog.com/governance/docs/evidence-service-cli) |
 | Predicate / payload | What to store vs name/tag | [Evidence Predicate](https://docs.jfrog.com/governance/docs/evidence-predicate), [Understanding Evidence Files](https://docs.jfrog.com/governance/docs/understanding-evidence-files) |
 | Query | Look up by package/digest after rename | [View Evidence](https://docs.jfrog.com/governance/docs/view-evidence), [Search for Evidence using GraphQL](https://docs.jfrog.com/governance/docs/search-for-evidence-using-graphql) |
 | GitHub attestations | Optional: GHA provenance into Evidence Collection | [GitHub attestation to JFrog Evidence](https://docs.jfrog.com/integrations/docs/github-actions-github-attestation-to-jfrog-evidence) |
