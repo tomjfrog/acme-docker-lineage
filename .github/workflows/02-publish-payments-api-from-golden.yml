@@ -1,6 +1,6 @@
-# Customer talking point: build payments-api FROM golden and attach derived-from Evidence
-# (Tier 1 explicit lineage that survives rename at the digest level).
-# Resolves golden-base:1.0.0 from the catalog — does not chain GitHub run ids.
+# Customer talking point: payments-api publishes first; derived-from Evidence is
+# attached only after a post-push vet against the golden catalog (not a gate).
+# Catalog-native: pulls golden-base:1.0.0 after publish — does not chain GitHub run ids.
 name: 02 Publish payments-api from golden
 
 on:
@@ -40,6 +40,7 @@ jobs:
             echo "GOLDEN_IMAGE=${GOLDEN}"
             echo "APP_IMAGE=${APP}"
             echo "OUT_DIR=lab/out/${GITHUB_RUN_NUMBER}"
+            echo "LINEAGE_DERIVED=false"
           } >> "${GITHUB_ENV}"
           echo "Resolved BUILD_NUM=${BNUM} golden=${GOLDEN} app=${APP}"
 
@@ -82,20 +83,6 @@ jobs:
         if: ${{ env.ACT }}
         run: jf docker login "${JF_DOCKER_REGISTRY}"
 
-      - name: Resolve golden index digest from catalog
-        run: |
-          set -euo pipefail
-          if ! GOLDEN_DIGEST="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "${GOLDEN_IMAGE}")"; then
-            echo "::error::Could not inspect ${GOLDEN_IMAGE}. Dispatch 01 Publish golden first."
-            exit 1
-          fi
-          if [[ -z "${GOLDEN_DIGEST}" ]]; then
-            echo "::error::Empty index digest for ${GOLDEN_IMAGE}"
-            exit 1
-          fi
-          echo "GOLDEN_DIGEST=${GOLDEN_DIGEST}" >> "${GITHUB_ENV}"
-          echo "Resolved golden index digest=${GOLDEN_DIGEST}"
-
       - name: Build and push payments-api (multi-arch)
         id: build-and-push
         uses: docker/build-push-action@v7
@@ -103,6 +90,7 @@ jobs:
           context: lab/app-from-golden
           push: true
           platforms: linux/amd64,linux/arm64
+          provenance: mode=min
           tags: ${{ env.APP_IMAGE }}
           build-args: |
             GOLDEN_IMAGE=${{ env.GOLDEN_IMAGE }}
@@ -117,24 +105,6 @@ jobs:
         with:
           subject-name: oci://${{ env.JF_DOCKER_REGISTRY }}/${{ env.DOCKER_REPO }}/${{ env.APP_NAME }}
           subject-digest: ${{ steps.build-and-push.outputs.digest }}
-
-      - name: Write Evidence signing key
-        env:
-          EVIDENCE_SIGNING_KEY: ${{ secrets.EVIDENCE_SIGNING_KEY }}
-        run: |
-          set -euo pipefail
-          KEY_FILE="${RUNNER_TEMP}/evidence.key"
-          if [[ -z "${EVIDENCE_SIGNING_KEY}" ]]; then
-            echo "::error::EVIDENCE_SIGNING_KEY repository secret is required"
-            exit 1
-          fi
-          if printf '%s' "${EVIDENCE_SIGNING_KEY}" | grep -q "BEGIN"; then
-            printf '%s\n' "${EVIDENCE_SIGNING_KEY}" > "${KEY_FILE}"
-          else
-            printf '%s' "${EVIDENCE_SIGNING_KEY}" | base64 --decode > "${KEY_FILE}"
-          fi
-          chmod 600 "${KEY_FILE}"
-          echo "EVIDENCE_KEY_FILE=${KEY_FILE}" >> "${GITHUB_ENV}"
 
       - name: Publish JFrog Build Info
         run: |
@@ -154,7 +124,71 @@ jobs:
           set -euo pipefail
           jf rt set-props \
             "${DOCKER_REPO}/${APP_NAME}/${APP_TAG}/" \
-            "golden.image=false;com.acme.image.role=app;com.acme.expected.base=golden;com.acme.lineage.lab=true;com.acme.base.digest=${GOLDEN_DIGEST}"
+            "golden.image=false;com.acme.image.role=app;com.acme.expected.base=golden;com.acme.lineage.lab=true"
+
+      - name: Vet derived-from golden (catalog vs BuildKit SLSA)
+        run: |
+          set -euo pipefail
+          RUN_DIR="${OUT_DIR}"
+          mkdir -p "${RUN_DIR}"
+          echo "RUN_DIR=${RUN_DIR}" >> "${GITHUB_ENV}"
+
+          if ! GOLDEN_MANIFEST="$(docker buildx imagetools inspect --format '{{json .Manifest}}' "${GOLDEN_IMAGE}")"; then
+            echo "::warning::Could not inspect ${GOLDEN_IMAGE}. Skipping derived-from Evidence. Dispatch 01 Publish golden first."
+            echo "LINEAGE_DERIVED=false" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+          GOLDEN_DIGEST="$(printf '%s' "${GOLDEN_MANIFEST}" | jq -r '.digest // empty')"
+          if [[ -z "${GOLDEN_DIGEST}" ]]; then
+            echo "::warning::Empty golden index digest for ${GOLDEN_IMAGE}. Skipping derived-from Evidence."
+            echo "LINEAGE_DERIVED=false" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+          echo "GOLDEN_DIGEST=${GOLDEN_DIGEST}" >> "${GITHUB_ENV}"
+
+          ALLOWED="$(printf '%s' "${GOLDEN_MANIFEST}" | jq -r '
+            [
+              .digest,
+              (.manifests[]? | select((.platform.os // "") != "unknown") | .digest)
+            ] | map(select(. != null and . != "")) | unique | .[]
+          ')"
+          printf '%s\n' "${ALLOWED}" > "${RUN_DIR}/golden.allowed-digests.txt"
+
+          if ! PROVENANCE="$(docker buildx imagetools inspect --format '{{json .Provenance}}' "${APP_IMAGE}")"; then
+            echo "::warning::Could not inspect BuildKit provenance on ${APP_IMAGE}. Skipping derived-from Evidence."
+            echo "LINEAGE_DERIVED=false" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+          printf '%s' "${PROVENANCE}" > "${RUN_DIR}/app.provenance.json"
+
+          MATERIALS="$(printf '%s' "${PROVENANCE}" | jq -r '
+            [
+              .. | objects | .materials? | arrays | .[]
+              | (.digest.sha256 // empty | if . != "" then "sha256:" + . else empty end),
+                (if (.digest | type) == "string" then .digest else empty end)
+            ] | map(select(. != null and . != "")) | unique | .[]
+          ')"
+          printf '%s\n' "${MATERIALS}" > "${RUN_DIR}/app.slsa-materials.txt"
+
+          MATCH=false
+          while IFS= read -r mat; do
+            [[ -z "${mat}" ]] && continue
+            while IFS= read -r allow; do
+              [[ -z "${allow}" ]] && continue
+              if [[ "${mat}" == "${allow}" ]]; then
+                MATCH=true
+                break 2
+              fi
+            done <<< "${ALLOWED}"
+          done <<< "${MATERIALS}"
+
+          if [[ "${MATCH}" == true ]]; then
+            echo "LINEAGE_DERIVED=true" >> "${GITHUB_ENV}"
+            echo "payments-api SLSA materials match golden catalog ${GOLDEN_IMAGE}@${GOLDEN_DIGEST}"
+          else
+            echo "LINEAGE_DERIVED=false" >> "${GITHUB_ENV}"
+            echo "::warning::payments-api is not attested as derived-from-golden (BuildKit materials do not match ${GOLDEN_IMAGE} index or platform digests)."
+          fi
 
       - name: Capture lineage artifacts (amd64 layers)
         run: |
@@ -167,12 +201,42 @@ jobs:
           printf '%s\n' "${APP_DIGEST}" > "${RUN_DIR}/app.digest.txt"
           printf '%s\n' "${PLATFORM_DIGEST}" > "${RUN_DIR}/app.amd64.digest.txt"
           printf '%s\n' "${APP_IMAGE}" > "${RUN_DIR}/app.ref.txt"
-          printf '%s\n' "${GOLDEN_DIGEST}" > "${RUN_DIR}/golden.digest.txt"
           printf '%s\n' "${GOLDEN_IMAGE}" > "${RUN_DIR}/golden.ref.txt"
+          if [[ -n "${GOLDEN_DIGEST:-}" ]]; then
+            printf '%s\n' "${GOLDEN_DIGEST}" > "${RUN_DIR}/golden.digest.txt"
+          fi
           echo "PLATFORM_DIGEST=${PLATFORM_DIGEST}" >> "${GITHUB_ENV}"
           echo "RUN_DIR=${RUN_DIR}" >> "${GITHUB_ENV}"
 
+      - name: Write Evidence signing key
+        if: ${{ env.LINEAGE_DERIVED == 'true' }}
+        env:
+          EVIDENCE_SIGNING_KEY: ${{ secrets.EVIDENCE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          KEY_FILE="${RUNNER_TEMP}/evidence.key"
+          if [[ -z "${EVIDENCE_SIGNING_KEY}" ]]; then
+            echo "::error::EVIDENCE_SIGNING_KEY repository secret is required"
+            exit 1
+          fi
+          if printf '%s' "${EVIDENCE_SIGNING_KEY}" | grep -q "BEGIN"; then
+            printf '%s\n' "${EVIDENCE_SIGNING_KEY}" > "${KEY_FILE}"
+          else
+            printf '%s' "${EVIDENCE_SIGNING_KEY}" | base64 --decode > "${KEY_FILE}"
+          fi
+          chmod 600 "${KEY_FILE}"
+          echo "EVIDENCE_KEY_FILE=${KEY_FILE}" >> "${GITHUB_ENV}"
+
+      - name: Set base digest property
+        if: ${{ env.LINEAGE_DERIVED == 'true' }}
+        run: |
+          set -euo pipefail
+          jf rt set-props \
+            "${DOCKER_REPO}/${APP_NAME}/${APP_TAG}/" \
+            "com.acme.base.digest=${GOLDEN_DIGEST}"
+
       - name: Attach derived-from Evidence
+        if: ${{ env.LINEAGE_DERIVED == 'true' }}
         run: |
           set -euo pipefail
           PREDICATE="${RUN_DIR}/app-lineage-evidence.json"
