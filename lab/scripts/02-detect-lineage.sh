@@ -2,7 +2,7 @@
 # Detect whether candidate images are derived from the golden base via:
 #   1) layer DiffID prefix matching (forensic / rename-safe / multi-hop root)
 #   2) Evidence lookup (explicit provenance when present)
-#   3) Evidence parent-chain walk (multi-hop: fizz-service → payments-api → golden-base)
+#   3) Evidence parent-chain walk (multi-hop: salestax-api → payments-api → golden-base)
 #   4) Build Info presence (supporting signal)
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -130,8 +130,8 @@ walk_evidence_to_golden() {
     "${APP_NAME}:${APP_TAG}")
       [[ -f "${RUN_DIR}/app.digest.txt" ]] && prefer_digest="$(cat "${RUN_DIR}/app.digest.txt")"
       ;;
-    "${GRANDCHILD_NAME}:${GRANDCHILD_TAG}")
-      [[ -f "${RUN_DIR}/grandchild.digest.txt" ]] && prefer_digest="$(cat "${RUN_DIR}/grandchild.digest.txt")"
+    "${SALESTAX_NAME}:${SALESTAX_TAG}")
+      [[ -f "${RUN_DIR}/salestax.digest.txt" ]] && prefer_digest="$(cat "${RUN_DIR}/salestax.digest.txt")"
       ;;
   esac
 
@@ -203,7 +203,7 @@ GOLDEN_LAYERS="${RUN_DIR}/golden.layers.txt"
 # case_id|layers|pkg|tag|build|expect_layers|walk_evidence
 declare -a CASES=(
   "app|${RUN_DIR}/app.layers.txt|${APP_NAME}|${APP_TAG}|acme-lineage-app|expect_match|walk"
-  "grandchild|${RUN_DIR}/grandchild.layers.txt|${GRANDCHILD_NAME}|${GRANDCHILD_TAG}|acme-lineage-grandchild|expect_match|walk"
+  "salestax|${RUN_DIR}/salestax.layers.txt|${SALESTAX_NAME}|${SALESTAX_TAG}|acme-lineage-salestax|expect_match|walk"
   "app_renamed|${RUN_DIR}/app-renamed.layers.txt|${APP_RENAMED_NAME}|${APP_RENAMED_TAG}|none|expect_match|skip"
   "non_golden|${RUN_DIR}/non-golden.layers.txt|${NON_GOLDEN_NAME}|${NON_GOLDEN_TAG}|acme-lineage-nongolden|expect_no_match|skip"
 )
@@ -216,7 +216,7 @@ json_cases='[]'
   echo "Run: \`${RUN_STAMP}\`"
   echo "Golden (Foo): \`$(cat "${RUN_DIR}/golden.ref.txt")\`"
   echo "Golden digest: \`${GOLDEN_DIGEST}\`"
-  echo "Image chain: golden-base=\`${GOLDEN_NAME}\` → payments-api=\`${APP_NAME}\` → fizz-service=\`${GRANDCHILD_NAME}\`"
+  echo "Image chain: golden-base=\`${GOLDEN_NAME}\` → payments-api=\`${APP_NAME}\` → salestax-api=\`${SALESTAX_NAME}\`"
   echo
   echo "| Case | Layer prefix of golden? | Evidence on package | Evidence walk → golden? | Build Info | Verdict |"
   echo "|---|---|---|---|---|---|"
@@ -278,8 +278,8 @@ for entry in "${CASES[@]}"; do
       verdict="FAIL: expected golden derivation via layers"
       ok="false"
     fi
-    if [[ "${case_id}" == "grandchild" && "${walk_status}" != "true" ]]; then
-      verdict="FAIL: grandchild Evidence walk did not reach golden (${walk_path})"
+    if [[ "${case_id}" == "salestax" && "${walk_status}" != "true" ]]; then
+      verdict="FAIL: salestax-api Evidence walk did not reach golden (${walk_path})"
       ok="false"
     fi
   else
@@ -329,7 +329,7 @@ jq -n \
   --arg run "${RUN_STAMP}" \
   --arg golden_ref "$(cat "${RUN_DIR}/golden.ref.txt")" \
   --arg golden_digest "${GOLDEN_DIGEST}" \
-  --arg chain "golden-base=${GOLDEN_NAME} → payments-api=${APP_NAME} → fizz-service=${GRANDCHILD_NAME}" \
+  --arg chain "golden-base=${GOLDEN_NAME} → payments-api=${APP_NAME} → salestax-api=${SALESTAX_NAME}" \
   --argjson cases "${json_cases}" \
   --argjson pass "${pass_count}" \
   --argjson fail "${fail_count}" \
@@ -352,8 +352,8 @@ jq -n \
   echo
   echo "## Multi-hop notes"
   echo
-  echo "- **Tier 2 (layers):** golden DiffID prefix on Fizz proves root is golden even when \`FROM\` was payments-api."
-  echo "- **Tier 1 (Evidence):** Fizz predicate names only payments-api; walk fizz-service → payments-api → golden-base is required unless \`root_golden_digest\` is recorded."
+  echo "- **Tier 2 (layers):** golden DiffID prefix on salestax-api proves root is golden even when \`FROM\` was payments-api."
+  echo "- **Tier 1 (Evidence):** salestax-api predicate names only payments-api; walk salestax-api → payments-api → golden-base is required unless \`root_golden_digest\` is recorded."
 } >> "${REPORT}"
 
 log "Report → ${REPORT}"

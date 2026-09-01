@@ -75,7 +75,7 @@ FROM: acmecorp.jfrog.io/acmecorp-goldenimages/Foo:SHA123456
 ENTRYPOINT: run.sh
 ```
 
-2. Some time later, a new application image is created by team "Alpha", only this time it's built off `Bar:v0.1`.  This new application image is `Fizz` with tag `v0.1`.  The Dockerfile would look something like this:
+2. Some time later, a new application image is created by team "Alpha", only this time it's built off `Bar:v0.1`.  This new application image is `salestax-api` with tag `v0.1`.  The Dockerfile would look something like this:
 
 ```dockerfile
 FROM: acmecorp.jfrog.io/alpha-local/Bar:v0.1

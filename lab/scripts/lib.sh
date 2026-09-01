@@ -21,16 +21,16 @@ DOCKER_REPO="${DOCKER_REPO:-lineage-docker-local}"
 REGISTRY_HOST="${REGISTRY_HOST:-tomjpd2.jfrog.io}"
 
 # Image names used in the lab (see SPEC.md for original problem-statement aliases):
-#   golden-base (APP base), payments-api (direct descendant), fizz-service (multi-hop)
+#   golden-base (APP base), payments-api (direct descendant), salestax-api (multi-hop)
 GOLDEN_NAME="${GOLDEN_NAME:-golden-base}"
 GOLDEN_TAG="${GOLDEN_TAG:-1.0.0}"
 APP_NAME="${APP_NAME:-payments-api}"
 APP_TAG="${APP_TAG:-2.0.0}"
 APP_RENAMED_NAME="${APP_RENAMED_NAME:-billing-service}"
 APP_RENAMED_TAG="${APP_RENAMED_TAG:-9.9.9}"
-# Multi-hop grandchild: FROM payments-api, not directly FROM golden-base
-GRANDCHILD_NAME="${GRANDCHILD_NAME:-fizz-service}"
-GRANDCHILD_TAG="${GRANDCHILD_TAG:-0.1.0}"
+# Multi-hop: FROM payments-api, not directly FROM golden-base
+SALESTAX_NAME="${SALESTAX_NAME:-salestax-api}"
+SALESTAX_TAG="${SALESTAX_TAG:-0.1.0}"
 NON_GOLDEN_NAME="${NON_GOLDEN_NAME:-rogue-api}"
 NON_GOLDEN_TAG="${NON_GOLDEN_TAG:-1.0.0}"
 
@@ -40,7 +40,7 @@ KEY_FILE="${KEYS_DIR}/evidence.key"
 GOLDEN_IMAGE="${REGISTRY_HOST}/${DOCKER_REPO}/${GOLDEN_NAME}:${GOLDEN_TAG}"
 APP_IMAGE="${REGISTRY_HOST}/${DOCKER_REPO}/${APP_NAME}:${APP_TAG}"
 APP_RENAMED_IMAGE="${REGISTRY_HOST}/${DOCKER_REPO}/${APP_RENAMED_NAME}:${APP_RENAMED_TAG}"
-GRANDCHILD_IMAGE="${REGISTRY_HOST}/${DOCKER_REPO}/${GRANDCHILD_NAME}:${GRANDCHILD_TAG}"
+SALESTAX_IMAGE="${REGISTRY_HOST}/${DOCKER_REPO}/${SALESTAX_NAME}:${SALESTAX_TAG}"
 NON_GOLDEN_IMAGE="${REGISTRY_HOST}/${DOCKER_REPO}/${NON_GOLDEN_NAME}:${NON_GOLDEN_TAG}"
 
 PREDICATE_TYPE_GOLDEN="https://jfrog.com/evidence/acme-docker-lineage/golden-base/v1"
