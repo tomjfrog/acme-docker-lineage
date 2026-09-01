@@ -39,10 +39,6 @@ write_layers_file "${GRANDCHILD_IMAGE}" "${RUN_DIR}/grandchild.layers.txt"
 printf '%s\n' "${GRANDCHILD_DIGEST}" > "${RUN_DIR}/grandchild.digest.txt"
 printf '%s\n' "${GRANDCHILD_IMAGE}" > "${RUN_DIR}/grandchild.ref.txt"
 
-jf_rt set-props \
-  "${DOCKER_REPO}/${GRANDCHILD_NAME}/${GRANDCHILD_TAG}/" \
-  "golden.image=false;com.acme.image.role=app-multihop;com.acme.expected.base=intermediate;com.acme.lineage.lab=true;com.acme.base.digest=${APP_DIGEST}"
-
 cat > "${RUN_DIR}/grandchild-lineage-evidence.json" <<EOF
 {
   "role": "derived-image",

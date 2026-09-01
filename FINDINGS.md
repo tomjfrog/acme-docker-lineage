@@ -31,7 +31,7 @@ Signing is useful for **integrity** of attestations; it is not required to answe
 | **Build Info** (`jf docker push --build-name/--build-number` + `jf rt build-publish`) | Yes (digest-tied) | Strong **if** base collected as dependency / CI records it | Bare `docker push` without CLI build-info flags yields little lineage |
 | **Evidence** / SLSA / OCI attestations (`jf evd create`, cosign, GHA attest → Evidence Collection) | Yes | Strong when predicate lists base digest | Best *explicit* provenance; external evidence needs Enterprise+. On a **multi-arch tag**, package-scoped `jf evd create` and GHA attestations bind to the **index** (`list.manifest.json`), not each platform `manifest.json` — see [Multi-arch Evidence](#multi-arch-evidence-index-vs-platform-manifests) |
 | **Xray SBOM** (`jf docker scan --sbom`, component graph) | Yes | Weak / indirect | Package inventory ≠ base image identity |
-| Artifact **properties** set in CI (`jf rt set-props`) | Yes if set on digest | Only if CI sets them on **every** image | Do **not** cascade to descendants; lab `golden.image=true` stays on the golden path only |
+| Artifact **properties** (`jf rt set-props`) | Yes if set on digest | Only if CI sets them on **every** image | Do **not** cascade to descendants. This lab does **not** set them; do not search `@golden.image` for inventory |
 | OCI **`LABEL`s** on the golden image (`config.Labels`) | Yes (in child config) | **Yes, if inherited** — Artifactory copies them to `docker.label.*` on each descendant `manifest.json` | Searchable **today** with AQL / property search. Docker inherits labels on `FROM`. Layer squash does **not** strip them; `FROM scratch` + `COPY --from` does |
 | Image **name / tag** | No (that is the rename) | Insufficient | Do not key lineage on name alone |
 | Dockerfile `FROM` string in the registry | N/A | Not stored in OCI config | Must come from build system or attestation |
@@ -124,7 +124,7 @@ If the CLI is already configured: `jf rt curl --server-id <id> -XPOST -H "Conten
 
 **Lab-validated on `tomjpd2` / `lineage-docker-local`:** AQL for `@docker.label.com.acme.image.golden=true` hit `golden-base/1.0.0`, `payments-api/2.0.0` (direct child), `fizz-service/0.1.0` (multi-hop; Fizz never set that key), and `billing-service/9.9.9` (rename of payments-api). **Miss:** `rogue-api/1.0.0` (debian). Child labels that **override** the same key (`title`, `role`) are not inherited.
 
-**Artifact properties do not cascade.** Lab `jf rt set-props` `golden.image=true` is only on the golden path; descendants were set to `golden.image=false`. Searching `@golden.image=true` returns the golden image only. Do not conflate that overlay with OCI `docker.label.*`.
+**Artifact properties do not cascade.** `jf rt set-props` writes an overlay on the path you name; Artifactory does not copy it onto `FROM` descendants. This lab does **not** call `set-props`. Do not conflate a manual `golden.image` overlay with OCI `docker.label.*` copied from image config.
 
 **Squash vs this search**
 
@@ -181,7 +181,6 @@ CI contract for every image published to local Docker repos:
 **Golden catalog:** store approved bases in a dedicated Docker local (or promoted tags) with:
 
 - OCI `LABEL` marker (e.g. `com.acme.image.golden=true`) — inherited by `FROM` descendants and searchable in Artifactory as `docker.label.*`
-- optional artifact property `golden.image=true` on the golden path only (does **not** cascade)
 - Build Info
 - Evidence predicate marking the image as an approved base
 
@@ -249,7 +248,7 @@ For every approved base published to the catalog:
 
 1. Build and push via CI to the golden catalog; expose consumers to **digest-pinned** references (not only floating tags).
 2. Publish **Build Info** (`jf docker push --build-name/--build-number` + `jf rt build-publish`).
-3. Mark catalog membership with a **namespaced OCI `LABEL`** (e.g. `com.acme.image.golden=true`) plus Evidence predicate "approved golden". Optional artifact property `golden.image=true` on the golden path only.
+3. Mark catalog membership with a **namespaced OCI `LABEL`** (e.g. `com.acme.image.golden=true`) plus Evidence predicate "approved golden".
 4. Attach signed Evidence: role = golden-base, image digest, pipeline IDs.
 
 That catalog is the termination set for both layer-prefix matching and Evidence walks ("root is golden").
@@ -266,7 +265,7 @@ For every derived image (direct child **or** child-of-child):
    - preferably `base_package_name` / `base_package_version` (for walks)
    - pipeline / build identifiers
    **Multi-hop:** also store `root_golden_digest` (and/or only claim `derived_from_golden: true` when verified). If CI records only the immediate parent (payments-api), tooling **must** walk Evidence until a golden catalog hit.
-4. Do **not** override the golden marker `LABEL` key in descendant Dockerfiles. Optional extra properties (e.g. `com.acme.base.digest=…`) remain an overlay—not a substitute for Evidence.
+4. Do **not** override the golden marker `LABEL` key in descendant Dockerfiles.
 
 Bare `docker push` with no Build Info / Evidence leaves verification dependent on Tier 2 forensics only.
 
@@ -356,14 +355,14 @@ The lab on `tomjpd2` was run to pressure-test what JFrog and OCI metadata can pr
 |---|---|---|---|---|
 | 1 | **Provision a dedicated Docker local** | Created `lineage-docker-local` on `tomjpd2.jfrog.io` as the system of record for golden and app images. | Lineage work needs a controllable catalog of approved bases and app publishes in Artifactory—not ad-hoc tags on Docker Hub. | Stand up (or designate) golden + application Docker locals/virtuals; treat Artifactory as the authoritative registry for base and derived images. |
 | 2 | **Bootstrap Evidence signing** | Ran `lab/scripts/00-gen-keys.sh` (`jf evd gen-keys`, alias `acme-lineage-lab`) and uploaded the public key to Platform trusted keys. | Explicit provenance (Tier 1) requires signed Evidence; signing keys are a prerequisite, not the lineage answer itself. | Register org signing keys early; use Evidence for integrity of lineage claims. Do **not** frame the whole problem as “we need signing.” |
-| 3 | **Build & publish a golden base (Foo)** | Built `lab/golden` → `golden-base:1.0.0`, pushed with `jf docker push --build-name/--build-number`, published Build Info, set `golden.image=true`, attached Evidence predicate `…/golden-base/v1`. | A golden **catalog entry** is more than a tag: properties + Build Info + Evidence make “approved base” queryable. | Maintain an approved-base catalog in Artifactory (properties and/or Evidence). Pin consumers to digests from that catalog. |
+| 3 | **Build & publish a golden base (Foo)** | Built `lab/golden` → `golden-base:1.0.0`, pushed with `jf docker push --build-name/--build-number`, published Build Info, attached Evidence predicate `…/golden-base/v1`. | A golden **catalog entry** is more than a tag: OCI marker `LABEL` + Build Info + Evidence make “approved base” queryable. | Maintain an approved-base catalog in Artifactory (OCI labels and/or Evidence). Pin consumers to digests from that catalog. |
 | 4 | **Build payments-api FROM golden** | Built `payments-api:2.0.0` `FROM` the Artifactory golden **tag**; pushed with Build Info; attached derived-from Evidence **only after** BuildKit SLSA materials matched the golden catalog (index or platform digests). | Publish first; lineage attestation is a post-build vet, not a pre-build digest pin. Non-match does not fail the job. | Capture BuildKit provenance on publish; compare materials to the golden catalog before `jf evd create`. Do not treat GitHub workflow attestations as Docker `FROM`. |
 | 5 | **Build Fizz FROM payments-api (multi-hop)** | Built `fizz-service:0.1.0` `FROM` payments-api; Evidence records **only** immediate parent payments-api (`immediate_parent_only: true`, no root golden digest). | Root-is-golden is still provable via (a) golden DiffID **prefix** on Fizz and (b) Evidence **walk** fizz-service → payments-api → golden-base. Immediate-parent Evidence alone is insufficient. | Require either `root_golden_digest` in every lineage predicate **or** tooling that walks parent Evidence until a golden catalog hit. |
 | 6 | **Rename without CI cooperation** | `docker tag` / push same image as `billing-service:9.9.9` with **no** Build Info and **no** Evidence. Digests matched `payments-api:2.0.0` exactly. | Rename does **not** change content or layer DiffIDs. Evidence on the old package path does not auto-appear on the new name—but **layer-prefix matching still detects golden derivation**. | Answer Murphy/Ashwani directly: name change alone cannot hide golden lineage if you correlate layers (or digests). Prefer digest-keyed Evidence queries in tooling. |
 | 7 | **Build a non-golden control** | Built/pushed `rogue-api:1.0.0` from `debian:bookworm-slim` (not the golden catalog). | Negative control: no golden DiffID prefix → correctly classified as not derived from golden. | Detection must produce both true positives and true negatives; use a golden catalog, not “any alpine/debian.” |
 | 8 | **Run the lineage detector** | `lab/scripts/02-detect-lineage.sh`: (a) DiffID prefix vs golden, (b) Evidence on package, (c) Evidence walk to golden, (d) Build Info. | Tier 2 works for direct, renamed, and multi-hop; Tier 1 multi-hop needs walk or root digest; name/tag alone is insufficient. | Deploy catalog + layer prefix ± Evidence walk for audit/forensics; reserve AppTrust/Unified Policy evidence gates for promote/release (Tier 3). |
 | 9 | **Document CVS and Xray boundaries** | Compared capabilities to Compliant Version Selection and Xray SBOM. | CVS substitutes compliant *library* versions at resolve time—it does not answer “what was my Docker base?” SBOM helps security inventory, not base identity. | Keep CVS in the broader compliance story for language ecosystems; for Docker golden lineage use Build Info, Evidence, and layer correlation. |
-| 10 | **AQL search on inherited OCI golden `LABEL`** | Queried `lineage-docker-local` for `@docker.label.com.acme.image.golden=true` on `manifest.json` (AQL + property search + per-image `?properties`). | Docker inherits un-overridden golden labels into child config; Artifactory stores them as `docker.label.*`. Hits: golden, payments-api, Fizz (multi-hop), billing-service (rename). Miss: rogue-api. Manual `golden.image` properties do **not** cascade. Stored Packages GraphQL cannot filter OCI labels. | If golden teams already stamp a marker `LABEL`, recommend AQL inventory **today**. Instruct app Dockerfiles not to override that key. Do not use `FROM scratch`+`COPY --from` if this search must work. Layer squash is **not** a limitation for labels (it **is** for DiffIDs). |
+| 10 | **AQL search on inherited OCI golden `LABEL`** | Queried `lineage-docker-local` for `@docker.label.com.acme.image.golden=true` on `manifest.json` (AQL + property search + per-image `?properties`). | Docker inherits un-overridden golden labels into child config; Artifactory stores them as `docker.label.*`. Hits: golden, payments-api, Fizz (multi-hop), billing-service (rename). Miss: rogue-api. CI-set `jf rt set-props` overlays do **not** cascade (this lab no longer sets them). Stored Packages GraphQL cannot filter OCI labels. | If golden teams already stamp a marker `LABEL`, recommend AQL inventory **today**. Instruct app Dockerfiles not to override that key. Do not use `FROM scratch`+`COPY --from` if this search must work. Layer squash is **not** a limitation for labels (it **is** for DiffIDs). |
 
 ### How the steps compose into the three-tier model
 
@@ -412,13 +411,13 @@ Prior run `20260812114414` covered direct + rename + non-golden only (pre multi-
 | Renamed (no CI metadata) | `billing-service:9.9.9` | `sha256:72ca7c68335…` (**same as payments-api**) | **true** | missing (by design) | n/a | n/a | DERIVED_FROM_GOLDEN via layers |
 | Non-golden | `rogue-api:1.0.0` | `sha256:626d0e47247…` | **false** | missing | n/a | found | NOT_DERIVED_FROM_GOLDEN |
 
-Golden catalog entry: `golden-base:1.0.0` @ `sha256:d3c58610c5a…` with property `golden.image=true` and Evidence predicate type `…/golden-base/v1`.
+Golden catalog entry: `golden-base:1.0.0` @ `sha256:d3c58610c5a…` with Evidence predicate type `…/golden-base/v1`.
 
 **Multi-hop proof:** Fizz Evidence predicate set `derived_from_golden: false` / `immediate_parent_only: true` and named only payments-api. Detector still established root golden via (1) DiffID prefix of golden on Fizz and (2) Evidence walk fizz-service → payments-api → golden-base.
 
 **Rename proof:** retag/push of payments-api as `billing-service:9.9.9` reused identical content digest and DiffID chain; name change alone did not break Tier 2 detection. Evidence did not auto-appear on the renamed path.
 
-**OCI label AQL proof:** `@docker.label.com.acme.image.golden=true` on `manifest.json` returned four paths — `golden-base/1.0.0`, `payments-api/2.0.0`, `fizz-service/0.1.0`, `billing-service/9.9.9` — and not `rogue-api`. Fizz’s Dockerfile never set `com.acme.image.golden`; the value is inherited through payments-api. `GET …/manifest.json?properties` showed `docker.label.com.acme.image.golden=true` on those four; rogue had only title/role/`expected_base`. Lab artifact property `golden.image=true` remained golden-only.
+**OCI label AQL proof:** `@docker.label.com.acme.image.golden=true` on `manifest.json` returned four paths — `golden-base/1.0.0`, `payments-api/2.0.0`, `fizz-service/0.1.0`, `billing-service/9.9.9` — and not `rogue-api`. Fizz’s Dockerfile never set `com.acme.image.golden`; the value is inherited through payments-api. `GET …/manifest.json?properties` showed `docker.label.com.acme.image.golden=true` on those four; rogue had only title/role/`expected_base`.
 
 Layer DiffIDs observed (`20260817152017`):
 
@@ -506,7 +505,7 @@ Public JFrog docs for the capabilities in this recommendation. Share this list w
 | OCI repositories | OCI index / multi-arch subjects (Evidence may attach to `list.manifest.json`) | [OCI Repositories](https://docs.jfrog.com/artifactory/docs/oci-repositories) |
 | Remote / virtual repos | Pull-through cache is **path of the cached artifact**, not derived-image lineage | [Remote Repositories](https://docs.jfrog.com/artifactory/docs/remote-repositories), [Virtual Repositories](https://docs.jfrog.com/artifactory/docs/virtual-repositories) |
 | `jf docker` | Build, push, scan with CLI; `--build-name` / `--build-number` | [Use Docker with JFrog CLI](https://docs.jfrog.com/artifactory/docs/jf-docker) |
-| Artifact properties | Operational overlay (e.g. `golden.image=true` on the golden path); **does not cascade** to descendants | [JFrog Properties](https://docs.jfrog.com/artifactory/docs/jfrog-properties) |
+| Artifact properties | Manual overlay via `jf rt set-props`; **does not cascade** to `FROM` descendants. This lab does not set them. Do not confuse with `docker.label.*` from OCI labels | [JFrog Properties](https://docs.jfrog.com/artifactory/docs/jfrog-properties) |
 | AQL | Search inherited OCI labels as `@docker.label.<key>` on `manifest.json`; also packages/builds by digest | [Artifactory Query Language](https://docs.jfrog.com/artifactory/docs/artifactory-query-language), [AQL search criteria](https://docs.jfrog.com/artifactory/docs/aql-search-criteria), [AQL query execution](https://docs.jfrog.com/artifactory/docs/aql-query-execution) (`POST …/api/search/aql`, `text/plain`), [Property Search REST](https://docs.jfrog.com/artifactory/reference/searchproperty) |
 | Stored Packages GraphQL | Package/version inventory; **cannot** filter by OCI `LABEL` | [Stored Packages OneModel GraphQL](https://docs.jfrog.com/integrations/docs/stored-packages-onemodel-graphql) |
 

@@ -128,13 +128,6 @@ jobs:
           jf rt build-collect-env "${BUILD_NAME}" "${BUILD_NUM}" || true
           jf rt build-publish "${BUILD_NAME}" "${BUILD_NUM}"
 
-      - name: Set golden properties
-        run: |
-          set -euo pipefail
-          jf rt set-props \
-            "${DOCKER_REPO}/${GOLDEN_NAME}/${GOLDEN_TAG}/" \
-            "golden.image=true;com.acme.image.role=golden-base;com.acme.lineage.lab=true"
-
       - name: Capture lineage artifacts (amd64 layers)
         run: |
           set -euo pipefail

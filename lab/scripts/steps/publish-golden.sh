@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Publish Foo (golden-base): build, push, Build Info, properties, Evidence.
+# Publish Foo (golden-base): build, push, Build Info, Evidence.
 # Copied from lab/scripts/01-build-push.sh section 1 — original 01 left intact.
 set -euo pipefail
 STEPS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,11 +24,6 @@ GOLDEN_DIGEST="$(docker image inspect --format '{{index .RepoDigests 0}}' "${GOL
 write_layers_file "${GOLDEN_IMAGE}" "${RUN_DIR}/golden.layers.txt"
 printf '%s\n' "${GOLDEN_DIGEST}" > "${RUN_DIR}/golden.digest.txt"
 printf '%s\n' "${GOLDEN_IMAGE}" > "${RUN_DIR}/golden.ref.txt"
-
-log "Set golden properties on ${DOCKER_REPO}/${GOLDEN_NAME}/${GOLDEN_TAG}/"
-jf_rt set-props \
-  "${DOCKER_REPO}/${GOLDEN_NAME}/${GOLDEN_TAG}/" \
-  "golden.image=true;com.acme.image.role=golden-base;com.acme.lineage.lab=true"
 
 cat > "${RUN_DIR}/golden-evidence.json" <<EOF
 {
