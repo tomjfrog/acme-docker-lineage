@@ -1,0 +1,289 @@
+# Multi-hop salestax-api FROM payments-api with immediate-parent-only Evidence —
+# root-is-golden needs Evidence walk or layer-prefix (Tier 1+2). Catalog-native:
+# pulls payments-api:2.0.0 after publish — does not chain GitHub run ids.
+name: 03 Publish salestax-api multi-hop
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  attestations: write
+
+jobs:
+  publish-salestax-api:
+    runs-on: ubuntu-latest
+    env:
+      JF_URL: ${{ vars.JF_URL }}
+      JF_DOCKER_REGISTRY: ${{ vars.JF_DOCKER_REGISTRY }}
+      DOCKER_REPO: lineage-docker-local
+      APP_NAME: payments-api
+      APP_TAG: 2.0.0
+      SALESTAX_NAME: salestax-api
+      SALESTAX_TAG: 0.1.0
+      BUILD_NAME: acme-lineage-salestax
+      KEY_ALIAS: acme-lineage-lab
+      PREDICATE_TYPE_LINEAGE: https://jfrog.com/evidence/acme-docker-lineage/derived-from/v1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set job env
+        run: |
+          set -euo pipefail
+          APP="${JF_DOCKER_REGISTRY}/${DOCKER_REPO}/${APP_NAME}:${APP_TAG}"
+          SALESTAX="${JF_DOCKER_REGISTRY}/${DOCKER_REPO}/${SALESTAX_NAME}:${SALESTAX_TAG}"
+          BNUM="${GITHUB_RUN_NUMBER}-${SALESTAX_TAG}"
+          {
+            echo "BUILD_NUM=${BNUM}"
+            echo "CI=true"
+            echo "APP_IMAGE=${APP}"
+            echo "SALESTAX_IMAGE=${SALESTAX}"
+            echo "OUT_DIR=lab/out/${GITHUB_RUN_NUMBER}"
+            echo "LINEAGE_PARENT_MATCH=false"
+          } >> "${GITHUB_ENV}"
+          echo "Resolved BUILD_NUM=${BNUM} parent=${APP} salestax=${SALESTAX}"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Setup JFrog CLI (OIDC)
+        if: ${{ !env.ACT }}
+        id: setup-jfrog-cli
+        uses: jfrog/setup-jfrog-cli@v4
+        env:
+          JF_URL: ${{ env.JF_URL }}
+        with:
+          version: 2.120.0
+          oidc-provider-name: ${{ secrets.OIDC_PROVIDER_NAME }}
+
+      # JF_ACCESS_TOKEN stays scoped to this step: at job level it would override
+      # the OIDC exchange and break the post-job Evidence collection.
+      - name: Setup JFrog CLI (access token)
+        if: ${{ env.ACT }}
+        uses: jfrog/setup-jfrog-cli@v4
+        env:
+          JF_URL: ${{ env.JF_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+        with:
+          version: 2.120.0
+
+      - name: Docker login to Artifactory (OIDC)
+        if: ${{ !env.ACT }}
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.JF_DOCKER_REGISTRY }}
+          username: ${{ steps.setup-jfrog-cli.outputs.oidc-user }}
+          password: ${{ steps.setup-jfrog-cli.outputs.oidc-token }}
+
+      - name: Docker login to Artifactory (act)
+        if: ${{ env.ACT }}
+        run: jf docker login "${JF_DOCKER_REGISTRY}"
+
+      - name: Build and push salestax-api (multi-arch)
+        id: build-and-push
+        uses: docker/build-push-action@v7
+        with:
+          context: lab/app-from-intermediate
+          push: true
+          platforms: linux/amd64,linux/arm64
+          provenance: mode=min
+          tags: ${{ env.SALESTAX_IMAGE }}
+          build-args: |
+            BASE_IMAGE=${{ env.APP_IMAGE }}
+
+      - name: Record index digest
+        run: |
+          set -euo pipefail
+          echo "SALESTAX_DIGEST=${{ steps.build-and-push.outputs.digest }}" >> "${GITHUB_ENV}"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: oci://${{ env.JF_DOCKER_REGISTRY }}/${{ env.DOCKER_REPO }}/${{ env.SALESTAX_NAME }}
+          subject-digest: ${{ steps.build-and-push.outputs.digest }}
+
+      - name: Publish JFrog Build Info
+        run: |
+          set -euo pipefail
+          IMAGE_FILE="${RUNNER_TEMP}/salestax-api-image-file.json"
+          jq -n --arg image "${SALESTAX_IMAGE}@${SALESTAX_DIGEST}" '{image: $image}' > "${IMAGE_FILE}"
+          cat "${IMAGE_FILE}"
+          jf rt build-docker-create "${DOCKER_REPO}" \
+            --image-file "${IMAGE_FILE}" \
+            --build-name "${BUILD_NAME}" \
+            --build-number "${BUILD_NUM}"
+          jf rt build-collect-env "${BUILD_NAME}" "${BUILD_NUM}" || true
+          jf rt build-publish "${BUILD_NAME}" "${BUILD_NUM}"
+
+      - name: Vet immediate parent payments-api (catalog vs BuildKit SLSA)
+        run: |
+          set -euo pipefail
+          RUN_DIR="${OUT_DIR}"
+          mkdir -p "${RUN_DIR}"
+          echo "RUN_DIR=${RUN_DIR}" >> "${GITHUB_ENV}"
+
+          if ! APP_MANIFEST="$(docker buildx imagetools inspect --format '{{json .Manifest}}' "${APP_IMAGE}")"; then
+            echo "::warning::Could not inspect ${APP_IMAGE}. Skipping derived-from Evidence. Dispatch 02 Publish payments-api first."
+            echo "LINEAGE_PARENT_MATCH=false" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+          APP_DIGEST="$(printf '%s' "${APP_MANIFEST}" | jq -r '.digest // empty')"
+          if [[ -z "${APP_DIGEST}" ]]; then
+            echo "::warning::Empty payments-api index digest for ${APP_IMAGE}. Skipping derived-from Evidence."
+            echo "LINEAGE_PARENT_MATCH=false" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+          echo "APP_DIGEST=${APP_DIGEST}" >> "${GITHUB_ENV}"
+
+          ALLOWED="$(printf '%s' "${APP_MANIFEST}" | jq -r '
+            [
+              .digest,
+              (.manifests[]? | select((.platform.os // "") != "unknown") | .digest)
+            ] | map(select(. != null and . != "")) | unique | .[]
+          ')"
+          printf '%s\n' "${ALLOWED}" > "${RUN_DIR}/payments-api.allowed-digests.txt"
+
+          if ! PROVENANCE="$(docker buildx imagetools inspect --format '{{json .Provenance}}' "${SALESTAX_IMAGE}")"; then
+            echo "::warning::Could not inspect BuildKit provenance on ${SALESTAX_IMAGE}. Skipping derived-from Evidence."
+            echo "LINEAGE_PARENT_MATCH=false" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+          printf '%s' "${PROVENANCE}" > "${RUN_DIR}/salestax.provenance.json"
+
+          MATERIALS="$(printf '%s' "${PROVENANCE}" | jq -r '
+            [
+              .. | objects | ((.materials // empty), (.resolvedDependencies // empty)) | arrays | .[]
+              | (.digest.sha256 // empty | if . != "" then "sha256:" + . else empty end),
+                (if (.digest | type) == "string" then .digest else empty end)
+            ] | map(select(. != null and . != "")) | unique | .[]
+          ')"
+          printf '%s\n' "${MATERIALS}" > "${RUN_DIR}/salestax.slsa-materials.txt"
+
+          MATCH=false
+          while IFS= read -r mat; do
+            [[ -z "${mat}" ]] && continue
+            while IFS= read -r allow; do
+              [[ -z "${allow}" ]] && continue
+              if [[ "${mat}" == "${allow}" ]]; then
+                MATCH=true
+                break 2
+              fi
+            done <<< "${ALLOWED}"
+          done <<< "${MATERIALS}"
+
+          if [[ "${MATCH}" == true ]]; then
+            echo "LINEAGE_PARENT_MATCH=true" >> "${GITHUB_ENV}"
+            echo "salestax-api SLSA materials match payments-api catalog ${APP_IMAGE}@${APP_DIGEST}"
+          else
+            echo "LINEAGE_PARENT_MATCH=false" >> "${GITHUB_ENV}"
+            echo "::warning::salestax-api is not attested as derived-from payments-api (BuildKit materials do not match ${APP_IMAGE} index or platform digests)."
+          fi
+
+      - name: Capture lineage artifacts (amd64 layers)
+        run: |
+          set -euo pipefail
+          RUN_DIR="${OUT_DIR}"
+          mkdir -p "${RUN_DIR}"
+          docker pull --platform linux/amd64 "${SALESTAX_IMAGE}"
+          PLATFORM_DIGEST="$(docker image inspect --format '{{index .RepoDigests 0}}' "${SALESTAX_IMAGE}" | sed -E 's/.*@//')"
+          docker image inspect --format '{{json .RootFS.Layers}}' "${SALESTAX_IMAGE}" | jq -r '.[]' > "${RUN_DIR}/salestax.layers.txt"
+          printf '%s\n' "${SALESTAX_DIGEST}" > "${RUN_DIR}/salestax.digest.txt"
+          printf '%s\n' "${PLATFORM_DIGEST}" > "${RUN_DIR}/salestax.amd64.digest.txt"
+          printf '%s\n' "${SALESTAX_IMAGE}" > "${RUN_DIR}/salestax.ref.txt"
+          printf '%s\n' "${APP_IMAGE}" > "${RUN_DIR}/app.ref.txt"
+          if [[ -n "${APP_DIGEST:-}" ]]; then
+            printf '%s\n' "${APP_DIGEST}" > "${RUN_DIR}/app.digest.txt"
+          fi
+          echo "PLATFORM_DIGEST=${PLATFORM_DIGEST}" >> "${GITHUB_ENV}"
+          echo "RUN_DIR=${RUN_DIR}" >> "${GITHUB_ENV}"
+
+      - name: Write Evidence signing key
+        if: ${{ env.LINEAGE_PARENT_MATCH == 'true' }}
+        env:
+          EVIDENCE_SIGNING_KEY: ${{ secrets.EVIDENCE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          KEY_FILE="${RUNNER_TEMP}/evidence.key"
+          if [[ -z "${EVIDENCE_SIGNING_KEY}" ]]; then
+            echo "::error::EVIDENCE_SIGNING_KEY repository secret is required"
+            exit 1
+          fi
+          if printf '%s' "${EVIDENCE_SIGNING_KEY}" | grep -q "BEGIN"; then
+            printf '%s\n' "${EVIDENCE_SIGNING_KEY}" > "${KEY_FILE}"
+          else
+            printf '%s' "${EVIDENCE_SIGNING_KEY}" | base64 --decode > "${KEY_FILE}"
+          fi
+          chmod 600 "${KEY_FILE}"
+          echo "EVIDENCE_KEY_FILE=${KEY_FILE}" >> "${GITHUB_ENV}"
+
+      - name: Attach derived-from Evidence
+        if: ${{ env.LINEAGE_PARENT_MATCH == 'true' }}
+        run: |
+          set -euo pipefail
+          PREDICATE="${RUN_DIR}/salestax-lineage-evidence.json"
+          jq -n \
+            --arg image_ref "${SALESTAX_IMAGE}" \
+            --arg image_digest "${SALESTAX_DIGEST}" \
+            --arg base_image_ref "${APP_IMAGE}" \
+            --arg base_image_digest "${APP_DIGEST}" \
+            --arg base_package_name "${APP_NAME}" \
+            --arg base_package_version "${APP_TAG}" \
+            --arg build_name "${BUILD_NAME}" \
+            --arg build_number "${BUILD_NUM}" \
+            --arg created_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+            '{
+              role: "derived-image",
+              image_ref: $image_ref,
+              image_digest: $image_digest,
+              base_image_ref: $base_image_ref,
+              base_image_digest: $base_image_digest,
+              base_package_name: $base_package_name,
+              base_package_version: $base_package_version,
+              derived_from_golden: false,
+              immediate_parent_only: true,
+              note: "Immediate base is payments-api, not golden-base. Root golden requires Evidence walk or layer-prefix.",
+              lab: "acme-docker-lineage",
+              build_name: $build_name,
+              build_number: $build_number,
+              created_at: $created_at
+            }' > "${PREDICATE}"
+          OUT="${RUN_DIR}/salestax-evidence-create.json"
+          if jf evd create \
+            --package-name "${SALESTAX_NAME}" \
+            --package-version "${SALESTAX_TAG}" \
+            --package-repo-name "${DOCKER_REPO}" \
+            --predicate "${PREDICATE}" \
+            --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
+            --key "${EVIDENCE_KEY_FILE}" \
+            --key-alias "${KEY_ALIAS}" \
+            | tee "${OUT}"; then
+            echo "Package-scoped derived-from Evidence attached"
+          elif jf evd create \
+            --subject-repo-path "${DOCKER_REPO}/${SALESTAX_NAME}/${SALESTAX_TAG}/list.manifest.json" \
+            --predicate "${PREDICATE}" \
+            --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
+            --key "${EVIDENCE_KEY_FILE}" \
+            --key-alias "${KEY_ALIAS}" \
+            | tee "${OUT}"; then
+            echo "Subject-path Evidence attached (list.manifest.json)"
+          else
+            jf evd create \
+              --subject-repo-path "${DOCKER_REPO}/${SALESTAX_NAME}/${SALESTAX_TAG}/manifest.json" \
+              --predicate "${PREDICATE}" \
+              --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
+              --key "${EVIDENCE_KEY_FILE}" \
+              --key-alias "${KEY_ALIAS}" \
+              | tee "${OUT}"
+          fi
+
+      - name: Upload this-run logs
+        if: ${{ !env.ACT }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: salestax-api-${{ github.run_number }}-${{ env.SALESTAX_TAG }}
+          path: ${{ env.OUT_DIR }}/
+          if-no-files-found: warn

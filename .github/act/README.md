@@ -122,9 +122,9 @@ ACT_OPTS=(
 )
 
 act workflow_dispatch -W .github/workflows/00-setup-evidence-keys.yml --secret-file "$SECRETS" "${ACT_OPTS[@]}" --input run_id="$RID"
-act workflow_dispatch -W .github/workflows/01-publish-golden.yml --secret-file "$SECRETS" "${ACT_OPTS[@]}" --input run_id="$RID"
-act workflow_dispatch -W .github/workflows/02-publish-payments-api-from-golden.yml --secret-file "$SECRETS" "${ACT_OPTS[@]}" --input run_id="$RID"
-act workflow_dispatch -W .github/workflows/03-publish-fizz-multihop.yml --secret-file "$SECRETS" "${ACT_OPTS[@]}" --input run_id="$RID"
+act workflow_dispatch -W .github/workflows/01-publish-golden.yml --secret-file "$SECRETS" "${ACT_OPTS[@]}"
+act workflow_dispatch -W .github/workflows/02-publish-payments-api-from-golden.yml --secret-file "$SECRETS" "${ACT_OPTS[@]}"
+act workflow_dispatch -W .github/workflows/03-publish-salestax-api-multihop.yml --secret-file "$SECRETS" "${ACT_OPTS[@]}"
 act workflow_dispatch -W .github/workflows/04-rename-without-ci.yml --secret-file "$SECRETS" "${ACT_OPTS[@]}" --input run_id="$RID"
 act workflow_dispatch -W .github/workflows/05-publish-non-golden.yml --secret-file "$SECRETS" "${ACT_OPTS[@]}" --input run_id="$RID"
 act workflow_dispatch -W .github/workflows/06-detect-lineage.yml --secret-file "$SECRETS" "${ACT_OPTS[@]}" --input run_id="$RID"

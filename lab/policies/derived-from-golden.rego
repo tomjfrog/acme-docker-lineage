@@ -28,8 +28,8 @@
 # Positive control: payments-api (derived_from_golden: true).
 # Negative control: rogue-api (no lineage Evidence) — still fails.
 # Stretch negative: Evidence of the right type with derived_from_golden: false
-#   (today Fizz is that shape — 1003 would pass; this template should fail
-#    unless we also write root_golden_digest on Fizz).
+#   (today salestax-api is that shape — 1003 would pass; this template should fail
+#    unless we also write root_golden_digest on salestax-api).
 
 package curation.policies
 

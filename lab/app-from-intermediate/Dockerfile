@@ -3,7 +3,7 @@
 ARG BASE_IMAGE=tomjpd2.jfrog.io/lineage-docker-local/payments-api:2.0.0
 FROM ${BASE_IMAGE}
 
-LABEL org.opencontainers.image.title="acme-app-from-intermediate" \
+LABEL org.opencontainers.image.title="acme-salestax-from-payments" \
       com.acme.image.role="app-multihop" \
       com.acme.image.expected_base="intermediate"
 

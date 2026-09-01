@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Publish Fizz (fizz-service) FROM payments-api; Evidence names immediate parent only.
+# Publish salestax-api FROM payments-api; Evidence names immediate parent only.
 # Copied from lab/scripts/01-build-push.sh section 3 — original 01 left intact.
 set -euo pipefail
 STEPS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,31 +19,31 @@ else
   printf '%s\n' "${APP_IMAGE}" > "${RUN_DIR}/app.ref.txt"
 fi
 
-log "Build multi-hop grandchild → ${GRANDCHILD_IMAGE} (FROM ${APP_IMAGE})"
+log "Build multi-hop salestax-api → ${SALESTAX_IMAGE} (FROM ${APP_IMAGE})"
 docker build \
   --build-arg "BASE_IMAGE=${APP_IMAGE}" \
-  -t "${GRANDCHILD_IMAGE}" \
+  -t "${SALESTAX_IMAGE}" \
   "${LAB_DIR}/app-from-intermediate"
 
-log "Push grandchild with build-info"
-jf docker push "${GRANDCHILD_IMAGE}" \
+log "Push salestax-api with build-info"
+jf docker push "${SALESTAX_IMAGE}" \
   --server-id "${SERVER_ID}" \
-  --build-name "acme-lineage-grandchild" \
+  --build-name "acme-lineage-salestax" \
   --build-number "${BUILD_NUM}"
 
-jf rt build-collect-env "acme-lineage-grandchild" "${BUILD_NUM}" || true
-jf rt build-publish "acme-lineage-grandchild" "${BUILD_NUM}" --server-id "${SERVER_ID}"
+jf rt build-collect-env "acme-lineage-salestax" "${BUILD_NUM}" || true
+jf rt build-publish "acme-lineage-salestax" "${BUILD_NUM}" --server-id "${SERVER_ID}"
 
-GRANDCHILD_DIGEST="$(docker image inspect --format '{{index .RepoDigests 0}}' "${GRANDCHILD_IMAGE}" | sed -E 's/.*@//')"
-write_layers_file "${GRANDCHILD_IMAGE}" "${RUN_DIR}/grandchild.layers.txt"
-printf '%s\n' "${GRANDCHILD_DIGEST}" > "${RUN_DIR}/grandchild.digest.txt"
-printf '%s\n' "${GRANDCHILD_IMAGE}" > "${RUN_DIR}/grandchild.ref.txt"
+SALESTAX_DIGEST="$(docker image inspect --format '{{index .RepoDigests 0}}' "${SALESTAX_IMAGE}" | sed -E 's/.*@//')"
+write_layers_file "${SALESTAX_IMAGE}" "${RUN_DIR}/salestax.layers.txt"
+printf '%s\n' "${SALESTAX_DIGEST}" > "${RUN_DIR}/salestax.digest.txt"
+printf '%s\n' "${SALESTAX_IMAGE}" > "${RUN_DIR}/salestax.ref.txt"
 
-cat > "${RUN_DIR}/grandchild-lineage-evidence.json" <<EOF
+cat > "${RUN_DIR}/salestax-lineage-evidence.json" <<EOF
 {
   "role": "derived-image",
-  "image_ref": "${GRANDCHILD_IMAGE}",
-  "image_digest": "${GRANDCHILD_DIGEST}",
+  "image_ref": "${SALESTAX_IMAGE}",
+  "image_digest": "${SALESTAX_DIGEST}",
   "base_image_ref": "${APP_IMAGE}",
   "base_image_digest": "${APP_DIGEST}",
   "base_package_name": "${APP_NAME}",
@@ -52,31 +52,31 @@ cat > "${RUN_DIR}/grandchild-lineage-evidence.json" <<EOF
   "immediate_parent_only": true,
   "note": "Immediate base is payments-api, not golden-base. Root golden requires Evidence walk or layer-prefix.",
   "lab": "acme-docker-lineage",
-  "build_name": "acme-lineage-grandchild",
+  "build_name": "acme-lineage-salestax",
   "build_number": "${BUILD_NUM}",
   "created_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 }
 EOF
 
-log "Attach lineage Evidence to grandchild (immediate parent = payments-api only)"
+log "Attach lineage Evidence to salestax-api (immediate parent = payments-api only)"
 jf evd create \
   --server-id "${SERVER_ID}" \
-  --package-name "${GRANDCHILD_NAME}" \
-  --package-version "${GRANDCHILD_TAG}" \
+  --package-name "${SALESTAX_NAME}" \
+  --package-version "${SALESTAX_TAG}" \
   --package-repo-name "${DOCKER_REPO}" \
-  --predicate "${RUN_DIR}/grandchild-lineage-evidence.json" \
+  --predicate "${RUN_DIR}/salestax-lineage-evidence.json" \
   --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
   --key "${KEY_FILE}" \
   --key-alias "${KEY_ALIAS}" \
-  | tee "${RUN_DIR}/grandchild-evidence-create.json" || {
+  | tee "${RUN_DIR}/salestax-evidence-create.json" || {
     jf evd create \
       --server-id "${SERVER_ID}" \
-      --subject-repo-path "${DOCKER_REPO}/${GRANDCHILD_NAME}/${GRANDCHILD_TAG}/manifest.json" \
-      --predicate "${RUN_DIR}/grandchild-lineage-evidence.json" \
+      --subject-repo-path "${DOCKER_REPO}/${SALESTAX_NAME}/${SALESTAX_TAG}/manifest.json" \
+      --predicate "${RUN_DIR}/salestax-lineage-evidence.json" \
       --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
       --key "${KEY_FILE}" \
       --key-alias "${KEY_ALIAS}" \
-      | tee "${RUN_DIR}/grandchild-evidence-create.json"
+      | tee "${RUN_DIR}/salestax-evidence-create.json"
   }
 
-log "Fizz published. RUN_ID=${RUN_ID} digest=${GRANDCHILD_DIGEST}"
+log "salestax-api published. RUN_ID=${RUN_ID} digest=${SALESTAX_DIGEST}"
