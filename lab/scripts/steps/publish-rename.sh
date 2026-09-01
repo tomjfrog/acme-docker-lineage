@@ -25,8 +25,4 @@ write_layers_file "${APP_RENAMED_IMAGE}" "${RUN_DIR}/app-renamed.layers.txt"
 printf '%s\n' "${RENAMED_DIGEST}" > "${RUN_DIR}/app-renamed.digest.txt"
 printf '%s\n' "${APP_RENAMED_IMAGE}" > "${RUN_DIR}/app-renamed.ref.txt"
 
-jf_rt set-props \
-  "${DOCKER_REPO}/${APP_RENAMED_NAME}/${APP_RENAMED_TAG}/" \
-  "com.acme.image.role=app-renamed;com.acme.lineage.lab=true" || true
-
 log "Rename published. RUN_ID=${RUN_ID} digest=${RENAMED_DIGEST}"

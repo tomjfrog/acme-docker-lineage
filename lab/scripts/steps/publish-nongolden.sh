@@ -24,8 +24,4 @@ write_layers_file "${NON_GOLDEN_IMAGE}" "${RUN_DIR}/non-golden.layers.txt"
 printf '%s\n' "${NON_DIGEST}" > "${RUN_DIR}/non-golden.digest.txt"
 printf '%s\n' "${NON_GOLDEN_IMAGE}" > "${RUN_DIR}/non-golden.ref.txt"
 
-jf_rt set-props \
-  "${DOCKER_REPO}/${NON_GOLDEN_NAME}/${NON_GOLDEN_TAG}/" \
-  "golden.image=false;com.acme.image.role=app;com.acme.expected.base=non-golden;com.acme.lineage.lab=true"
-
 log "Non-golden published. RUN_ID=${RUN_ID} digest=${NON_DIGEST}"

@@ -55,10 +55,6 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
 }
 
-jf_rt() {
-  jf rt "$@" --server-id "${SERVER_ID}"
-}
-
 # A deactivated SaaS instance 302s everything to the landing page, which answers
 # 200 with HTML. Without this check, callers "succeed" and jq dies on <!DOCTYPE.
 require_platform() {
@@ -90,14 +86,6 @@ write_layers_file() {
   local image="$1"
   local out="$2"
   layer_diff_ids "${image}" > "${out}"
-}
-
-set_props() {
-  local repo_path="$1"
-  shift
-  local props_csv
-  props_csv="$(IFS=';'; echo "$*")"
-  jf_rt set-props "${repo_path}" "${props_csv}"
 }
 
 manifest_list_or_manifest_path() {

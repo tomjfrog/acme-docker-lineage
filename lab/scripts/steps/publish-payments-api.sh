@@ -39,10 +39,6 @@ write_layers_file "${APP_IMAGE}" "${RUN_DIR}/app.layers.txt"
 printf '%s\n' "${APP_DIGEST}" > "${RUN_DIR}/app.digest.txt"
 printf '%s\n' "${APP_IMAGE}" > "${RUN_DIR}/app.ref.txt"
 
-jf_rt set-props \
-  "${DOCKER_REPO}/${APP_NAME}/${APP_TAG}/" \
-  "golden.image=false;com.acme.image.role=app;com.acme.expected.base=golden;com.acme.lineage.lab=true;com.acme.base.digest=${GOLDEN_DIGEST}"
-
 cat > "${RUN_DIR}/app-lineage-evidence.json" <<EOF
 {
   "role": "derived-image",

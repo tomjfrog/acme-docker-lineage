@@ -119,13 +119,6 @@ jobs:
           jf rt build-collect-env "${BUILD_NAME}" "${BUILD_NUM}" || true
           jf rt build-publish "${BUILD_NAME}" "${BUILD_NUM}"
 
-      - name: Set payments-api properties
-        run: |
-          set -euo pipefail
-          jf rt set-props \
-            "${DOCKER_REPO}/${APP_NAME}/${APP_TAG}/" \
-            "golden.image=false;com.acme.image.role=app;com.acme.expected.base=golden;com.acme.lineage.lab=true"
-
       - name: Vet derived-from golden (catalog vs BuildKit SLSA)
         run: |
           set -euo pipefail
@@ -226,14 +219,6 @@ jobs:
           fi
           chmod 600 "${KEY_FILE}"
           echo "EVIDENCE_KEY_FILE=${KEY_FILE}" >> "${GITHUB_ENV}"
-
-      - name: Set base digest property
-        if: ${{ env.LINEAGE_DERIVED == 'true' }}
-        run: |
-          set -euo pipefail
-          jf rt set-props \
-            "${DOCKER_REPO}/${APP_NAME}/${APP_TAG}/" \
-            "com.acme.base.digest=${GOLDEN_DIGEST}"
 
       - name: Attach derived-from Evidence
         if: ${{ env.LINEAGE_DERIVED == 'true' }}

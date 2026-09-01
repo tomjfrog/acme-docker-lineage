@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build golden / from-golden / renamed / non-golden images; push to tomjpd2 with
-# Build Info, properties, and Evidence.
+# Build Info and Evidence.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh
@@ -41,11 +41,6 @@ GOLDEN_DIGEST="$(docker image inspect --format '{{index .RepoDigests 0}}' "${GOL
 write_layers_file "${GOLDEN_IMAGE}" "${RUN_DIR}/golden.layers.txt"
 printf '%s\n' "${GOLDEN_DIGEST}" > "${RUN_DIR}/golden.digest.txt"
 printf '%s\n' "${GOLDEN_IMAGE}" > "${RUN_DIR}/golden.ref.txt"
-
-log "Set golden properties on ${DOCKER_REPO}/${GOLDEN_NAME}/${GOLDEN_TAG}/"
-jf_rt set-props \
-  "${DOCKER_REPO}/${GOLDEN_NAME}/${GOLDEN_TAG}/" \
-  "golden.image=true;com.acme.image.role=golden-base;com.acme.lineage.lab=true"
 
 cat > "${RUN_DIR}/golden-evidence.json" <<EOF
 {
@@ -104,10 +99,6 @@ APP_DIGEST="$(docker image inspect --format '{{index .RepoDigests 0}}' "${APP_IM
 write_layers_file "${APP_IMAGE}" "${RUN_DIR}/app.layers.txt"
 printf '%s\n' "${APP_DIGEST}" > "${RUN_DIR}/app.digest.txt"
 printf '%s\n' "${APP_IMAGE}" > "${RUN_DIR}/app.ref.txt"
-
-jf_rt set-props \
-  "${DOCKER_REPO}/${APP_NAME}/${APP_TAG}/" \
-  "golden.image=false;com.acme.image.role=app;com.acme.expected.base=golden;com.acme.lineage.lab=true;com.acme.base.digest=${GOLDEN_DIGEST}"
 
 cat > "${RUN_DIR}/app-lineage-evidence.json" <<EOF
 {
@@ -172,10 +163,6 @@ write_layers_file "${GRANDCHILD_IMAGE}" "${RUN_DIR}/grandchild.layers.txt"
 printf '%s\n' "${GRANDCHILD_DIGEST}" > "${RUN_DIR}/grandchild.digest.txt"
 printf '%s\n' "${GRANDCHILD_IMAGE}" > "${RUN_DIR}/grandchild.ref.txt"
 
-jf_rt set-props \
-  "${DOCKER_REPO}/${GRANDCHILD_NAME}/${GRANDCHILD_TAG}/" \
-  "golden.image=false;com.acme.image.role=app-multihop;com.acme.expected.base=intermediate;com.acme.lineage.lab=true;com.acme.base.digest=${APP_DIGEST}"
-
 cat > "${RUN_DIR}/grandchild-lineage-evidence.json" <<EOF
 {
   "role": "derived-image",
@@ -230,10 +217,6 @@ write_layers_file "${APP_RENAMED_IMAGE}" "${RUN_DIR}/app-renamed.layers.txt"
 printf '%s\n' "${RENAMED_DIGEST}" > "${RUN_DIR}/app-renamed.digest.txt"
 printf '%s\n' "${APP_RENAMED_IMAGE}" > "${RUN_DIR}/app-renamed.ref.txt"
 
-jf_rt set-props \
-  "${DOCKER_REPO}/${APP_RENAMED_NAME}/${APP_RENAMED_TAG}/" \
-  "com.acme.image.role=app-renamed;com.acme.lineage.lab=true" || true
-
 # ---------------------------------------------------------------------------
 # 5) Non-golden app
 # ---------------------------------------------------------------------------
@@ -252,10 +235,6 @@ NON_DIGEST="$(docker image inspect --format '{{index .RepoDigests 0}}' "${NON_GO
 write_layers_file "${NON_GOLDEN_IMAGE}" "${RUN_DIR}/non-golden.layers.txt"
 printf '%s\n' "${NON_DIGEST}" > "${RUN_DIR}/non-golden.digest.txt"
 printf '%s\n' "${NON_GOLDEN_IMAGE}" > "${RUN_DIR}/non-golden.ref.txt"
-
-jf_rt set-props \
-  "${DOCKER_REPO}/${NON_GOLDEN_NAME}/${NON_GOLDEN_TAG}/" \
-  "golden.image=false;com.acme.image.role=app;com.acme.expected.base=non-golden;com.acme.lineage.lab=true"
 
 cat > "${RUN_DIR}/summary.json" <<EOF
 {
