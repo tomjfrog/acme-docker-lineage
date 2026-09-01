@@ -3,7 +3,8 @@ FROM alpine:3.20
 
 LABEL org.opencontainers.image.title="acme-golden-base" \
       com.acme.image.role="golden-base" \
-      com.acme.image.golden="true"
+      com.acme.image.golden="true" \
+      com.acme.iamge.foo="bar"
 
 RUN echo "acme-golden-base-v1" > /etc/acme-golden-marker \
  && apk add --no-cache ca-certificates
