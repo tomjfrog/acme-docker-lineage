@@ -1,5 +1,6 @@
 lab/keys/
 lab/out/
+lab/golden/certs/private/
 *.key
 *.pub
 .DS_Store

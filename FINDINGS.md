@@ -47,6 +47,20 @@ After push/pull, registries do **not** reliably retain a human-readable parent i
 - **attestations** (Evidence / SLSA / in-toto)
 - **Build Info** metadata published by CI
 
+### Throwaway CA layer (customer analog)
+
+Some Golden Image programs copy a corporate CA (and OS packages) into the approved base. This lab does the same with a **checked-in, clearly fake** public cert (`lab/golden/certs/acme-lab-root-ca.crt` — CN `Acme Lab Root CA (NOT FOR PRODUCTION)`). The Dockerfile **COPY** is a dedicated layer; `update-ca-certificates` is a second layer. Do **not** generate the cert in the Dockerfile (the blob digest would change every rebuild). Do **not** use a real customer cert or any private key in the image.
+
+Build Info does **not** have a “certificate present” field. After Golden is republished, record the COPY layer blob name from the platform module (`sha256__<hex>`). Cooperative descendant publishes (`acme-lineage-app`, `acme-lineage-salestax`) already list inherited parent layer blobs as module artifacts. Search those builds by checksum:
+
+```
+builds.find({
+  "module.artifact.item.name": "sha256__<cert-layer-hex>"
+}).include("name", "number", "repo", "created")
+```
+
+That is blob-name search, not PEM search. Rename-without-CI still has **no** Build Info; the CA layer remains in the image for DiffID / blob matching. Squash, rebase, or `FROM scratch` + `COPY --from` drop the layer. linux/amd64 and linux/arm64 usually get different digests for the `update-ca-certificates` layer; treat the COPY blob (and each arch, if they differ) as catalog fingerprints.
+
 ### OCI golden-marker labels — searchable today
 
 If the Golden Image team already stamps approved bases with a **namespaced OCI `LABEL`** (this lab: `com.acme.image.golden=true`), Artifactory can inventory descendants **without GraphQL**.
@@ -329,7 +343,8 @@ A script, Worker, internal service, or gated pipeline step that can:
 
 ```
 lab/
-  golden/Dockerfile                 # Foo — approved base (alpine + marker)
+  golden/Dockerfile                 # Foo — approved base (alpine + marker + lab CA COPY)
+  golden/certs/                     # throwaway public CA only; private key gitignored
   app-from-golden/Dockerfile        # payments-api — FROM golden + app layer
   app-from-intermediate/Dockerfile  # salestax-api — FROM payments-api (multi-hop)
   app-non-golden/Dockerfile         # different base (debian)
