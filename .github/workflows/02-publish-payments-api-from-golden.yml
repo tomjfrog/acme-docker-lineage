@@ -1,6 +1,6 @@
 # payments-api publishes first; derived-from Evidence is
 # attached only after a post-push vet against the golden catalog (not a gate).
-# Catalog-native: pulls golden-base:1.0.0 after publish — does not chain GitHub run ids.
+# Unique tag is <stable>-<github.run_number>; 2.0.0 remains the catalog alias for 03/04/06.
 name: 02 Publish payments-api from golden
 
 on:
@@ -21,7 +21,7 @@ jobs:
       GOLDEN_NAME: golden-base
       GOLDEN_TAG: 1.0.0
       APP_NAME: payments-api
-      APP_TAG: 2.0.0
+      APP_TAG_STABLE: 2.0.0
       BUILD_NAME: acme-lineage-app
       KEY_ALIAS: acme-lineage-lab
       PREDICATE_TYPE_LINEAGE: https://jfrog.com/evidence/acme-docker-lineage/derived-from/v1
@@ -32,17 +32,21 @@ jobs:
         run: |
           set -euo pipefail
           GOLDEN="${JF_DOCKER_REGISTRY}/${DOCKER_REPO}/${GOLDEN_NAME}:${GOLDEN_TAG}"
+          APP_TAG="${APP_TAG_STABLE}-${GITHUB_RUN_NUMBER}"
           APP="${JF_DOCKER_REGISTRY}/${DOCKER_REPO}/${APP_NAME}:${APP_TAG}"
-          BNUM="${GITHUB_RUN_NUMBER}-${APP_TAG}"
+          APP_STABLE="${JF_DOCKER_REGISTRY}/${DOCKER_REPO}/${APP_NAME}:${APP_TAG_STABLE}"
+          BNUM="${GITHUB_RUN_NUMBER}-${APP_TAG_STABLE}"
           {
             echo "BUILD_NUM=${BNUM}"
             echo "CI=true"
             echo "GOLDEN_IMAGE=${GOLDEN}"
+            echo "APP_TAG=${APP_TAG}"
             echo "APP_IMAGE=${APP}"
+            echo "APP_IMAGE_STABLE=${APP_STABLE}"
             echo "OUT_DIR=lab/out/${GITHUB_RUN_NUMBER}"
             echo "LINEAGE_DERIVED=false"
           } >> "${GITHUB_ENV}"
-          echo "Resolved BUILD_NUM=${BNUM} golden=${GOLDEN} app=${APP}"
+          echo "Resolved BUILD_NUM=${BNUM} golden=${GOLDEN} app=${APP} alias=${APP_STABLE}"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -91,9 +95,13 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           provenance: mode=min
-          tags: ${{ env.APP_IMAGE }}
+          tags: |
+            ${{ env.APP_IMAGE }}
+            ${{ env.APP_IMAGE_STABLE }}
           build-args: |
             GOLDEN_IMAGE=${{ env.GOLDEN_IMAGE }}
+            GITHUB_RUN_NUMBER=${{ github.run_number }}
+            GITHUB_RUN_ID=${{ github.run_id }}
 
       - name: Record index digest
         run: |
@@ -237,6 +245,8 @@ jobs:
             --arg base_package_version "${GOLDEN_TAG}" \
             --arg build_name "${BUILD_NAME}" \
             --arg build_number "${BUILD_NUM}" \
+            --arg github_run_number "${GITHUB_RUN_NUMBER}" \
+            --arg github_run_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
             --arg created_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
             '{
               role: "derived-image",
@@ -250,6 +260,8 @@ jobs:
               lab: "acme-docker-lineage",
               build_name: $build_name,
               build_number: $build_number,
+              github_run_number: $github_run_number,
+              github_run_url: $github_run_url,
               created_at: $created_at
             }' > "${PREDICATE}"
           OUT="${RUN_DIR}/app-evidence-create.json"

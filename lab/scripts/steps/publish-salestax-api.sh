@@ -2,6 +2,7 @@
 # Publish salestax-api FROM payments-api; Evidence names immediate parent only.
 # Copied from lab/scripts/01-build-push.sh section 3 — original 01 left intact.
 set -euo pipefail
+export UNIQUE_IMAGE_TAGS=1
 STEPS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=_common.sh
 source "${STEPS_DIR}/_common.sh"
@@ -11,17 +12,19 @@ ensure_docker_login
 if [[ -f "${RUN_DIR}/app.digest.txt" ]]; then
   APP_DIGEST="$(cat "${RUN_DIR}/app.digest.txt")"
 else
-  log "No local app.digest.txt — pulling ${APP_IMAGE} for digest"
-  docker pull "${APP_IMAGE}"
-  APP_DIGEST="$(docker image inspect --format '{{index .RepoDigests 0}}' "${APP_IMAGE}" | sed -E 's/.*@//')"
+  log "No local app.digest.txt — pulling ${APP_IMAGE_STABLE} for digest"
+  docker pull "${APP_IMAGE_STABLE}"
+  APP_DIGEST="$(docker image inspect --format '{{index .RepoDigests 0}}' "${APP_IMAGE_STABLE}" | sed -E 's/.*@//')"
   mkdir -p "${RUN_DIR}"
   printf '%s\n' "${APP_DIGEST}" > "${RUN_DIR}/app.digest.txt"
-  printf '%s\n' "${APP_IMAGE}" > "${RUN_DIR}/app.ref.txt"
+  printf '%s\n' "${APP_IMAGE_STABLE}" > "${RUN_DIR}/app.ref.txt"
 fi
 
 log "Build multi-hop salestax-api → ${SALESTAX_IMAGE} (FROM ${APP_IMAGE})"
 docker build \
-  --build-arg "BASE_IMAGE=${APP_IMAGE}" \
+  --build-arg "BASE_IMAGE=${APP_IMAGE_STABLE}" \
+  --build-arg "GITHUB_RUN_NUMBER=${GITHUB_RUN_NUMBER:-0}" \
+  --build-arg "GITHUB_RUN_ID=${GITHUB_RUN_ID:-0}" \
   -t "${SALESTAX_IMAGE}" \
   "${LAB_DIR}/app-from-intermediate"
 
@@ -30,6 +33,7 @@ jf docker push "${SALESTAX_IMAGE}" \
   --server-id "${SERVER_ID}" \
   --build-name "acme-lineage-salestax" \
   --build-number "${BUILD_NUM}"
+push_stable_alias "${SALESTAX_IMAGE}" "${SALESTAX_IMAGE_STABLE}"
 
 jf rt build-collect-env "acme-lineage-salestax" "${BUILD_NUM}" || true
 jf rt build-publish "acme-lineage-salestax" "${BUILD_NUM}" --server-id "${SERVER_ID}"
@@ -44,10 +48,10 @@ cat > "${RUN_DIR}/salestax-lineage-evidence.json" <<EOF
   "role": "derived-image",
   "image_ref": "${SALESTAX_IMAGE}",
   "image_digest": "${SALESTAX_DIGEST}",
-  "base_image_ref": "${APP_IMAGE}",
+  "base_image_ref": "${APP_IMAGE_STABLE}",
   "base_image_digest": "${APP_DIGEST}",
   "base_package_name": "${APP_NAME}",
-  "base_package_version": "${APP_TAG}",
+  "base_package_version": "${APP_TAG_STABLE}",
   "derived_from_golden": false,
   "immediate_parent_only": true,
   "note": "Immediate base is payments-api, not golden-base. Root golden requires Evidence walk or layer-prefix.",

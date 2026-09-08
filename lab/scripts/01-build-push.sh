@@ -83,6 +83,8 @@ jf evd create \
 log "Build app-from-golden → ${APP_IMAGE}"
 docker build \
   --build-arg "GOLDEN_IMAGE=${GOLDEN_IMAGE}" \
+  --build-arg "GITHUB_RUN_NUMBER=${GITHUB_RUN_NUMBER:-0}" \
+  --build-arg "GITHUB_RUN_ID=${GITHUB_RUN_ID:-0}" \
   -t "${APP_IMAGE}" \
   "${LAB_DIR}/app-from-golden"
 
@@ -146,6 +148,8 @@ jf evd create \
 log "Build multi-hop salestax-api → ${SALESTAX_IMAGE} (FROM ${APP_IMAGE})"
 docker build \
   --build-arg "BASE_IMAGE=${APP_IMAGE}" \
+  --build-arg "GITHUB_RUN_NUMBER=${GITHUB_RUN_NUMBER:-0}" \
+  --build-arg "GITHUB_RUN_ID=${GITHUB_RUN_ID:-0}" \
   -t "${SALESTAX_IMAGE}" \
   "${LAB_DIR}/app-from-intermediate"
 
@@ -221,7 +225,11 @@ printf '%s\n' "${APP_RENAMED_IMAGE}" > "${RUN_DIR}/app-renamed.ref.txt"
 # 5) Non-golden app
 # ---------------------------------------------------------------------------
 log "Build non-golden → ${NON_GOLDEN_IMAGE}"
-docker build -t "${NON_GOLDEN_IMAGE}" "${LAB_DIR}/app-non-golden"
+docker build \
+  --build-arg "GITHUB_RUN_NUMBER=${GITHUB_RUN_NUMBER:-0}" \
+  --build-arg "GITHUB_RUN_ID=${GITHUB_RUN_ID:-0}" \
+  -t "${NON_GOLDEN_IMAGE}" \
+  "${LAB_DIR}/app-non-golden"
 
 log "Push non-golden with build-info"
 jf docker push "${NON_GOLDEN_IMAGE}" \
