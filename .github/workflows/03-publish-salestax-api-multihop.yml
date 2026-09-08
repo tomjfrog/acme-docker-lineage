@@ -130,6 +130,9 @@ jobs:
           jf rt build-collect-env "${BUILD_NAME}" "${BUILD_NUM}" || true
           jf rt build-publish "${BUILD_NAME}" "${BUILD_NUM}"
 
+      # Post-push check to determine immediate parent and lineage matches.
+      # Compare BuildKit SLSA materials on salestax-api to the Dockerfile parent's index and platform digests.
+      # A match sets LINEAGE_PARENT_MATCH so Evidence can be attached; a miss warns and skips Evidence.
       - name: Vet immediate parent (catalog vs BuildKit SLSA)
         run: |
           set -euo pipefail

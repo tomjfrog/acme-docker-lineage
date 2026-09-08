@@ -119,6 +119,9 @@ jobs:
           jf rt build-collect-env "${BUILD_NAME}" "${BUILD_NUM}" || true
           jf rt build-publish "${BUILD_NAME}" "${BUILD_NUM}"
 
+      # Post-push check, not a promote gate: the image is already in the catalog.
+      # Compare BuildKit SLSA materials on payments-api to the golden index and platform digests.
+      # A match sets LINEAGE_DERIVED so Evidence can be attached; a miss warns and skips Evidence.
       - name: Vet derived-from golden (catalog vs BuildKit SLSA)
         run: |
           set -euo pipefail
