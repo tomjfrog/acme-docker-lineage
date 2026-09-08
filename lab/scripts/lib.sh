@@ -20,28 +20,57 @@ JF_URL="${JF_URL:-https://tomjpd2.jfrog.io}"
 DOCKER_REPO="${DOCKER_REPO:-lineage-docker-local}"
 REGISTRY_HOST="${REGISTRY_HOST:-tomjpd2.jfrog.io}"
 
+# Child unique tags: <stable>-<GITHUB_RUN_NUMBER> when UNIQUE_IMAGE_TAGS=1 (publish
+# jobs only). Detector / Dockerfile FROM / AppTrust keep the stable aliases.
+child_image_tag() {
+  local stable="$1"
+  if [[ "${UNIQUE_IMAGE_TAGS:-}" == "1" && -n "${GITHUB_RUN_NUMBER:-}" ]]; then
+    printf '%s-%s\n' "${stable}" "${GITHUB_RUN_NUMBER}"
+  else
+    printf '%s\n' "${stable}"
+  fi
+}
+
 # Image names used in the lab (see SPEC.md for original problem-statement aliases):
 #   golden-base (APP base), payments-api (direct descendant), salestax-api (multi-hop)
 GOLDEN_NAME="${GOLDEN_NAME:-golden-base}"
 GOLDEN_TAG="${GOLDEN_TAG:-1.0.0}"
 APP_NAME="${APP_NAME:-payments-api}"
-APP_TAG="${APP_TAG:-2.0.0}"
+APP_TAG_STABLE="${APP_TAG_STABLE:-2.0.0}"
+APP_TAG="${APP_TAG:-$(child_image_tag "${APP_TAG_STABLE}")}"
 APP_RENAMED_NAME="${APP_RENAMED_NAME:-billing-service}"
-APP_RENAMED_TAG="${APP_RENAMED_TAG:-9.9.9}"
+APP_RENAMED_TAG_STABLE="${APP_RENAMED_TAG_STABLE:-9.9.9}"
+APP_RENAMED_TAG="${APP_RENAMED_TAG:-$(child_image_tag "${APP_RENAMED_TAG_STABLE}")}"
 # Multi-hop: FROM payments-api, not directly FROM golden-base
 SALESTAX_NAME="${SALESTAX_NAME:-salestax-api}"
-SALESTAX_TAG="${SALESTAX_TAG:-0.1.0}"
+SALESTAX_TAG_STABLE="${SALESTAX_TAG_STABLE:-0.1.0}"
+SALESTAX_TAG="${SALESTAX_TAG:-$(child_image_tag "${SALESTAX_TAG_STABLE}")}"
 NON_GOLDEN_NAME="${NON_GOLDEN_NAME:-rogue-api}"
-NON_GOLDEN_TAG="${NON_GOLDEN_TAG:-1.0.0}"
+NON_GOLDEN_TAG_STABLE="${NON_GOLDEN_TAG_STABLE:-1.0.0}"
+NON_GOLDEN_TAG="${NON_GOLDEN_TAG:-$(child_image_tag "${NON_GOLDEN_TAG_STABLE}")}"
 
 KEY_ALIAS="${KEY_ALIAS:-acme-lineage-lab}"
 KEY_FILE="${KEYS_DIR}/evidence.key"
 
 GOLDEN_IMAGE="${REGISTRY_HOST}/${DOCKER_REPO}/${GOLDEN_NAME}:${GOLDEN_TAG}"
 APP_IMAGE="${REGISTRY_HOST}/${DOCKER_REPO}/${APP_NAME}:${APP_TAG}"
+APP_IMAGE_STABLE="${REGISTRY_HOST}/${DOCKER_REPO}/${APP_NAME}:${APP_TAG_STABLE}"
 APP_RENAMED_IMAGE="${REGISTRY_HOST}/${DOCKER_REPO}/${APP_RENAMED_NAME}:${APP_RENAMED_TAG}"
+APP_RENAMED_IMAGE_STABLE="${REGISTRY_HOST}/${DOCKER_REPO}/${APP_RENAMED_NAME}:${APP_RENAMED_TAG_STABLE}"
 SALESTAX_IMAGE="${REGISTRY_HOST}/${DOCKER_REPO}/${SALESTAX_NAME}:${SALESTAX_TAG}"
+SALESTAX_IMAGE_STABLE="${REGISTRY_HOST}/${DOCKER_REPO}/${SALESTAX_NAME}:${SALESTAX_TAG_STABLE}"
 NON_GOLDEN_IMAGE="${REGISTRY_HOST}/${DOCKER_REPO}/${NON_GOLDEN_NAME}:${NON_GOLDEN_TAG}"
+NON_GOLDEN_IMAGE_STABLE="${REGISTRY_HOST}/${DOCKER_REPO}/${NON_GOLDEN_NAME}:${NON_GOLDEN_TAG_STABLE}"
+
+# Extra registry tag so catalog-native FROM / detector still use the stable alias.
+push_stable_alias() {
+  local unique_image="$1"
+  local stable_image="$2"
+  [[ "${unique_image}" == "${stable_image}" ]] && return 0
+  log "Also tag catalog alias ${stable_image}"
+  docker tag "${unique_image}" "${stable_image}"
+  jf docker push "${stable_image}" --server-id "${SERVER_ID}"
+}
 
 PREDICATE_TYPE_GOLDEN="https://jfrog.com/evidence/acme-docker-lineage/golden-base/v1"
 PREDICATE_TYPE_LINEAGE="https://jfrog.com/evidence/acme-docker-lineage/derived-from/v1"

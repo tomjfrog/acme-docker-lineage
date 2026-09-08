@@ -1,8 +1,8 @@
 # Customer talking point: multi-hop salestax-api FROM the Dockerfile parent
 # (not a hardcoded payments-api tag) with immediate-parent-only Evidence —
 # root-is-golden needs Evidence walk or layer-prefix (Tier 1+2). Catalog-native:
-# the parsed FROM is rewritten onto this JPD's registry host, then pulled —
-# does not chain GitHub run ids.
+# the parsed FROM is rewritten onto this JPD's registry host (stable 2.0.0 alias).
+# Unique tag is <stable>-<github.run_number>.
 name: 03 Publish salestax-api multi-hop
 
 on:
@@ -22,7 +22,7 @@ jobs:
       DOCKER_REPO: lineage-docker-local
       DOCKERFILE: lab/app-from-intermediate/Dockerfile
       SALESTAX_NAME: salestax-api
-      SALESTAX_TAG: 0.1.0
+      SALESTAX_TAG_STABLE: 0.1.0
       BUILD_NAME: acme-lineage-salestax
       KEY_ALIAS: acme-lineage-lab
       PREDICATE_TYPE_LINEAGE: https://jfrog.com/evidence/acme-docker-lineage/derived-from/v1
@@ -32,16 +32,20 @@ jobs:
       - name: Set job env
         run: |
           set -euo pipefail
+          SALESTAX_TAG="${SALESTAX_TAG_STABLE}-${GITHUB_RUN_NUMBER}"
           SALESTAX="${JF_DOCKER_REGISTRY}/${DOCKER_REPO}/${SALESTAX_NAME}:${SALESTAX_TAG}"
-          BNUM="${GITHUB_RUN_NUMBER}-${SALESTAX_TAG}"
+          SALESTAX_STABLE="${JF_DOCKER_REGISTRY}/${DOCKER_REPO}/${SALESTAX_NAME}:${SALESTAX_TAG_STABLE}"
+          BNUM="${GITHUB_RUN_NUMBER}-${SALESTAX_TAG_STABLE}"
           {
             echo "BUILD_NUM=${BNUM}"
             echo "CI=true"
+            echo "SALESTAX_TAG=${SALESTAX_TAG}"
             echo "SALESTAX_IMAGE=${SALESTAX}"
+            echo "SALESTAX_IMAGE_STABLE=${SALESTAX_STABLE}"
             echo "OUT_DIR=lab/out/${GITHUB_RUN_NUMBER}"
             echo "LINEAGE_PARENT_MATCH=false"
           } >> "${GITHUB_ENV}"
-          echo "Resolved BUILD_NUM=${BNUM} salestax=${SALESTAX}"
+          echo "Resolved BUILD_NUM=${BNUM} salestax=${SALESTAX} alias=${SALESTAX_STABLE}"
 
       # Parent identity comes from the last runtime FROM (ARG-expanded), not from
       # workflow env. Registry host is rewritten to this JPD so the vet hits the
@@ -102,9 +106,13 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           provenance: mode=min
-          tags: ${{ env.SALESTAX_IMAGE }}
+          tags: |
+            ${{ env.SALESTAX_IMAGE }}
+            ${{ env.SALESTAX_IMAGE_STABLE }}
           build-args: |
             BASE_IMAGE=${{ env.PARENT_IMAGE }}
+            GITHUB_RUN_NUMBER=${{ github.run_number }}
+            GITHUB_RUN_ID=${{ github.run_id }}
 
       - name: Record index digest
         run: |
@@ -254,6 +262,8 @@ jobs:
             --arg base_package_version "${PARENT_TAG}" \
             --arg build_name "${BUILD_NAME}" \
             --arg build_number "${BUILD_NUM}" \
+            --arg github_run_number "${GITHUB_RUN_NUMBER}" \
+            --arg github_run_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
             --arg created_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
             '{
               role: "derived-image",
@@ -269,6 +279,8 @@ jobs:
               lab: "acme-docker-lineage",
               build_name: $build_name,
               build_number: $build_number,
+              github_run_number: $github_run_number,
+              github_run_url: $github_run_url,
               created_at: $created_at
             }' > "${PREDICATE}"
           echo "EVIDENCE_PREDICATE=${PREDICATE}" >> "${GITHUB_ENV}"

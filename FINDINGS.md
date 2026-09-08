@@ -362,6 +362,8 @@ lab/
 
 **Image chain exercised:** `golden-base` → `payments-api` → `salestax-api` (see SPEC.md for the original problem-statement aliases)
 
+**Child tags:** GitHub Actions publishes unique Docker tags `<stable>-<github.run_number>` (example `payments-api:2.0.0-42`) and also the stable alias (`2.0.0`) so 03 FROM, 04 copy, and 06 detector stay catalog-native. Evidence `--package-version` is the unique tag. Rebuilt children also carry `docker.label.com.acme.ci.github_run_number` / `github_run_id` (Artifactory properties). Golden stays `1.0.0`.
+
 ---
 
 ## Lab steps → findings → customer recommendations

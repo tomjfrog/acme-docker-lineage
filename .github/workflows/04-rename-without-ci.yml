@@ -1,7 +1,7 @@
 # Customer talking point: rename without CI cooperation — same digests/layers,
 # no Evidence and no Build Info on the new name; Tier 2 layer matching still finds golden.
-# Catalog-native: copies payments-api:2.0.0 in Artifactory to billing-service:9.9.9 —
-# does not chain GitHub run ids.
+# Catalog-native: copies payments-api:2.0.0 (stable alias from 02) to
+# billing-service:9.9.9-<github.run_number> plus alias 9.9.9.
 name: 04 Rename without CI metadata
 
 on:
@@ -21,7 +21,7 @@ jobs:
       APP_NAME: payments-api
       APP_TAG: 2.0.0
       APP_RENAMED_NAME: billing-service
-      APP_RENAMED_TAG: 9.9.9
+      APP_RENAMED_TAG_STABLE: 9.9.9
     steps:
       - uses: actions/checkout@v4
 
@@ -29,14 +29,18 @@ jobs:
         run: |
           set -euo pipefail
           APP="${JF_DOCKER_REGISTRY}/${DOCKER_REPO}/${APP_NAME}:${APP_TAG}"
+          APP_RENAMED_TAG="${APP_RENAMED_TAG_STABLE}-${GITHUB_RUN_NUMBER}"
           RENAMED="${JF_DOCKER_REGISTRY}/${DOCKER_REPO}/${APP_RENAMED_NAME}:${APP_RENAMED_TAG}"
+          RENAMED_STABLE="${JF_DOCKER_REGISTRY}/${DOCKER_REPO}/${APP_RENAMED_NAME}:${APP_RENAMED_TAG_STABLE}"
           {
             echo "CI=true"
             echo "APP_IMAGE=${APP}"
+            echo "APP_RENAMED_TAG=${APP_RENAMED_TAG}"
             echo "APP_RENAMED_IMAGE=${RENAMED}"
+            echo "APP_RENAMED_IMAGE_STABLE=${RENAMED_STABLE}"
             echo "OUT_DIR=lab/out/${GITHUB_RUN_NUMBER}"
           } >> "${GITHUB_ENV}"
-          echo "Resolved app=${APP} renamed=${RENAMED}"
+          echo "Resolved app=${APP} renamed=${RENAMED} alias=${RENAMED_STABLE}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -101,6 +105,7 @@ jobs:
           docker buildx imagetools create \
             --prefer-index=false \
             --tag "${APP_RENAMED_IMAGE}" \
+            --tag "${APP_RENAMED_IMAGE_STABLE}" \
             "${APP_IMAGE}"
 
       - name: Confirm renamed digest matches source

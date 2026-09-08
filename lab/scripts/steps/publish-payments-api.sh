@@ -2,6 +2,7 @@
 # Publish payments-api FROM golden + lineage Evidence.
 # Copied from lab/scripts/01-build-push.sh section 2 — original 01 left intact.
 set -euo pipefail
+export UNIQUE_IMAGE_TAGS=1
 STEPS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=_common.sh
 source "${STEPS_DIR}/_common.sh"
@@ -22,6 +23,8 @@ fi
 log "Build app-from-golden → ${APP_IMAGE}"
 docker build \
   --build-arg "GOLDEN_IMAGE=${GOLDEN_IMAGE}" \
+  --build-arg "GITHUB_RUN_NUMBER=${GITHUB_RUN_NUMBER:-0}" \
+  --build-arg "GITHUB_RUN_ID=${GITHUB_RUN_ID:-0}" \
   -t "${APP_IMAGE}" \
   "${LAB_DIR}/app-from-golden"
 
@@ -30,6 +33,7 @@ jf docker push "${APP_IMAGE}" \
   --server-id "${SERVER_ID}" \
   --build-name "acme-lineage-app" \
   --build-number "${BUILD_NUM}"
+push_stable_alias "${APP_IMAGE}" "${APP_IMAGE_STABLE}"
 
 jf rt build-collect-env "acme-lineage-app" "${BUILD_NUM}" || true
 jf rt build-publish "acme-lineage-app" "${BUILD_NUM}" --server-id "${SERVER_ID}"

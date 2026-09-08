@@ -1,6 +1,7 @@
 # Customer talking point: forensic + Evidence detector — layer DiffID prefix,
 # Evidence walk to golden, Build Info join (Tier 1+2 verdicts).
-# Pulls stable tags from the catalog — does not chain GitHub run ids.
+# Pulls stable catalog aliases (2.0.0, 0.1.0, …) — unique per-run tags are
+# produced by 02–05; this job does not use github.run_number as an image tag.
 name: 06 Detect lineage
 
 on:

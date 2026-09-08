@@ -54,11 +54,13 @@ Lab image names (see [SPEC.md](../SPEC.md) for the original problem-statement al
 
 | Image | Purpose |
 |---|---|
-| `golden-base:1.0.0` | Approved golden base |
-| `payments-api:2.0.0` | Direct descendant: built `FROM` golden + Evidence (`base` = golden) |
-| `salestax-api:0.1.0` | Multi-hop: built `FROM` payments-api; Evidence names **only** payments-api |
-| `billing-service:9.9.9` | Same layers as payments-api, renamed tag (no Evidence) |
-| `rogue-api:1.0.0` | Built on debian (not golden) |
+| `golden-base:1.0.0` | Approved golden base (stable catalog tag) |
+| `payments-api:2.0.0-<run>` | Direct descendant; unique per GitHub Actions run. Alias `2.0.0` is also pushed. |
+| `salestax-api:0.1.0-<run>` | Multi-hop FROM payments-api. Alias `0.1.0`. |
+| `billing-service:9.9.9-<run>` | Catalog copy of payments-api (no Evidence). Alias `9.9.9`. |
+| `rogue-api:1.0.0-<run>` | Built on debian (not golden). Alias `1.0.0`. |
+
+GHA child publishes set `UNIQUE_IMAGE_TAGS=1` so the Artifactory Docker tag is `<stable>-<github.run_number>` (example: `payments-api:2.0.0-42`). Open that tag in the UI for that run’s Build Info / Evidence. `com.acme.ci.github_run_number` and `com.acme.ci.github_run_id` are OCI labels on rebuilt children. Workflows 03, 04, and 06 still resolve parents via the **stable** aliases.
 
 All push to `tomjpd2.jfrog.io/lineage-docker-local/…`.
 
