@@ -231,7 +231,10 @@ jobs:
           chmod 600 "${KEY_FILE}"
           echo "EVIDENCE_KEY_FILE=${KEY_FILE}" >> "${GITHUB_ENV}"
 
-      - name: Attach derived-from Evidence
+      # Note: `jq` is used to interpolate the various pieces of metadata into the Evidence predicate.
+      # A different approach could use a general-purpose template engine and perhaps a library or two to generate the Evidence predicate.
+      # This method was chosen to avoid adding a new dependency to the workflow.
+      - name: Write derived-from Evidence predicate
         if: ${{ env.LINEAGE_PARENT_MATCH == 'true' }}
         run: |
           set -euo pipefail
@@ -262,12 +265,21 @@ jobs:
               build_number: $build_number,
               created_at: $created_at
             }' > "${PREDICATE}"
+          echo "EVIDENCE_PREDICATE=${PREDICATE}" >> "${GITHUB_ENV}"
+
+      # We are using the same evidence predicate, but we have three subject bindings because a Docker tag is not one Artifactory file.
+      # Let's prefer the package-scope (lead artifact / OCI index), then list.manifest.json by path.
+      # The option of last-resort will be the tag-folder manifest.json for single-arch layouts that have no index.
+      - name: Attach derived-from Evidence
+        if: ${{ env.LINEAGE_PARENT_MATCH == 'true' }}
+        run: |
+          set -euo pipefail
           OUT="${RUN_DIR}/salestax-evidence-create.json"
           if jf evd create \
             --package-name "${SALESTAX_NAME}" \
             --package-version "${SALESTAX_TAG}" \
             --package-repo-name "${DOCKER_REPO}" \
-            --predicate "${PREDICATE}" \
+            --predicate "${EVIDENCE_PREDICATE}" \
             --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
             --key "${EVIDENCE_KEY_FILE}" \
             --key-alias "${KEY_ALIAS}" \
@@ -275,7 +287,7 @@ jobs:
             echo "Package-scoped derived-from Evidence attached"
           elif jf evd create \
             --subject-repo-path "${DOCKER_REPO}/${SALESTAX_NAME}/${SALESTAX_TAG}/list.manifest.json" \
-            --predicate "${PREDICATE}" \
+            --predicate "${EVIDENCE_PREDICATE}" \
             --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
             --key "${EVIDENCE_KEY_FILE}" \
             --key-alias "${KEY_ALIAS}" \
@@ -284,7 +296,7 @@ jobs:
           else
             jf evd create \
               --subject-repo-path "${DOCKER_REPO}/${SALESTAX_NAME}/${SALESTAX_TAG}/manifest.json" \
-              --predicate "${PREDICATE}" \
+              --predicate "${EVIDENCE_PREDICATE}" \
               --predicate-type "${PREDICATE_TYPE_LINEAGE}" \
               --key "${EVIDENCE_KEY_FILE}" \
               --key-alias "${KEY_ALIAS}" \
