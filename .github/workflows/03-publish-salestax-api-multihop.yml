@@ -197,6 +197,9 @@ jobs:
             echo "::warning::salestax-api is not attested as derived-from ${PARENT_IMAGE} (BuildKit materials do not match parent index or platform digests)."
           fi
 
+      # Forensic snapshot of this publish into lab/out/<run>/ (uploaded as the job artifact).
+      # Pull linux/amd64 and record DiffIDs, index digest, platform digest, and parent ref/digest.
+      # Always runs; not the SLSA vet and not Evidence attach.
       - name: Capture lineage artifacts (amd64 layers)
         run: |
           set -euo pipefail

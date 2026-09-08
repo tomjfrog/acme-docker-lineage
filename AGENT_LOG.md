@@ -4,17 +4,80 @@ Dated notes for later agents. Newest entry first. Product/lineage facts belong i
 
 ---
 
-## 2026-09-01 15:34 EDT — Native 03 + rename fizz-service → salestax-api
+## 2026-09-08 — Workflow 03: parse FROM, PARENT_*, split Evidence, comments
 
-Native catalog job: [`.github/workflows/03-publish-salestax-api-multihop.yml`](.github/workflows/03-publish-salestax-api-multihop.yml). Same auth/attest/Build Info pattern as 02. Parent vet is **payments-api:2.0.0** (not golden). Evidence predicate stays `derived_from_golden: false` / `immediate_parent_only: true`. No `setup-lab`, no `jf rt set-props`.
+Human closed after making 03 honest about the immediate parent and clearer to read. Product facts stay in `FINDINGS.md`. Do not re-learn the hardcoded-`APP_IMAGE` shortcut.
 
-**Rename:** catalog image is `salestax-api:0.1.0` (was `fizz-service`). Scripts use `SALESTAX_*`. Build Info `acme-lineage-salestax`. Detector artifacts `salestax.*.txt`. Local script remains [`lab/scripts/steps/publish-salestax-api.sh`](lab/scripts/steps/publish-salestax-api.sh) (single-arch); GHA does not invoke it.
+### What we did
 
-**Catalog leftover:** `lineage-docker-local/fizz-service` may still exist on `tomjpd2` until overwritten/deleted. After 03 runs, AQL hits should be `salestax-api/0.1.0` per-arch `manifest.json`.
+1. **Parent is no longer hardcoded in 03 env.** [`lab/scripts/resolve-dockerfile-from.py`](lab/scripts/resolve-dockerfile-from.py) expands the last runtime `FROM` (ARG defaults), skips `scratch`, rewrites only the registry host to `JF_DOCKER_REGISTRY`, and exports `PARENT_IMAGE` / `PARENT_NAME` / `PARENT_TAG`. Build `BASE_IMAGE` and the SLSA vet use that. Dockerfile: [`lab/app-from-intermediate/Dockerfile`](lab/app-from-intermediate/Dockerfile).
+2. **Renamed 03 parent vars** from leftover 02 vocabulary (`APP_IMAGE` = payments-api as *child*) to `PARENT_*` (`PARENT_IMAGE`, `PARENT_DIGEST`, `PARENT_MANIFEST`, capture `parent.ref.txt` / `parent.digest.txt`). Workflow **02**, detector **06**, and local `lib.sh` still use `APP_*` for payments-api as the published app — do not rename those.
+3. **Evidence is two steps:** Write predicate (`jq -n --arg`) then Attach (`jf evd create`). Fallback unchanged: package-scope → `list.manifest.json` → `manifest.json`. Predicate still `derived_from_golden: false` / `immediate_parent_only: true`. Do **not** put golden digest on the salestax-api predicate.
+4. **Comments:** 02/03 post-push SLSA vets; 03 capture artifacts (amd64 DiffIDs for the run artifact, not the vet). `jq -n` is stdout JSON; the shell redirect makes the file.
+5. **Catalog:** deleted `lineage-docker-local/salestax-api/` twice for 03 retries (`jf rt del`). Human asked to **keep** old Build Info (`acme-lineage-salestax/1-0.1.0`); new runs use a new `GITHUB_RUN_NUMBER`.
 
-**Next native migrate:** 04 rename (copy in catalog, no Evidence). setup-lab still wraps 00, 04–08.
+### Do not
+
+- Do not invent `APP_IMAGE=payments-api:2.0.0` in 03 workflow env.
+- Do not treat Dockerfile `FROM` as proof — it is the **claim**; SLSA ∩ catalog digest is the **proof**. Root-is-golden remains Evidence walk / layer-prefix in **06**.
+- Do not migrate 02 the same way unless asked (golden is still `GOLDEN_NAME`/`GOLDEN_TAG`).
+- Next native migrate is still **04**. Do not `jf rt set-props`.
+
+### Git this thread
+
+`origin` = `github.jfrog.info:tomj/acme-docker-image.git` (`main`). `external` = `github.com:tomjfrog/acme-docker-lineage.git` (`public` → `external/main`). Never merge `public` into `main`. Never push `main` to `external`. `AGENT_LOG.md` is internal (`origin/main`); strip it on the public merge if git restores it.
+
+Untracked and **not** committed: `PRESENTATION_SPEC.md`, `output-examples/`, `raw-logs.txt`, busybox inspect moves.
 
 ---
+
+## 2026-09-07 — Recap: native 03 + fizz-service → salestax-api (2026-09-01 thread)
+
+Human asked to continue native GHA (01/02 pattern) for workflow 03, then rename the multi-hop image. Work landed 2026-09-01; this entry is what later agents must not re-learn. Product facts stay in `FINDINGS.md`.
+
+### What we did
+
+1. Rewrote **03** as named native Actions steps. It no longer calls `setup-lab` or a `lab/scripts/steps/*.sh` script. File: [`.github/workflows/03-publish-salestax-api-multihop.yml`](.github/workflows/03-publish-salestax-api-multihop.yml) (was `03-publish-fizz-multihop.yml`).
+2. Renamed the catalog image **`fizz-service:0.1.0` → `salestax-api:0.1.0`**. Tag stays `0.1.0`. Prose, detector, FINDINGS, SPEC, lab README, act README, and Rego comments use `salestax-api` only. Directory `lab/app-from-intermediate/` kept (role = FROM payments-api).
+3. Auth/env copied from 02: `vars.JF_URL` / `vars.JF_DOCKER_REGISTRY`; OIDC vs `env.ACT` token; **no** job-level `JF_ACCESS_TOKEN`; no `oidc-audience`; `attestations: write`; CLI 2.120.0. **Do not** `jf rt set-props`.
+4. Parent vet is **payments-api:2.0.0** (BuildKit SLSA materials vs catalog index/platform digests), not golden. Evidence only if `LINEAGE_PARENT_MATCH`. Predicate is still `derived_from_golden: false` / `immediate_parent_only: true` (06 walk is the point).
+5. Multi-arch `linux/amd64,linux/arm64`, `provenance: mode=min`, GitHub attest on the **index**, Build Info `acme-lineage-salestax` / `BUILD_NUM=${GITHUB_RUN_NUMBER}-0.1.0`. Evidence fallback: package-scope → `list.manifest.json` → `manifest.json`.
+6. Local [`lab/scripts/steps/publish-salestax-api.sh`](lab/scripts/steps/publish-salestax-api.sh) kept for local/single-arch; GHA does not invoke it. `01-build-push.sh`, `02-detect-lineage.sh`, `lib.sh` (`SALESTAX_*`), and 06 catalog pulls use `salestax.*.txt`. OCI title `acme-salestax-from-payments`.
+
+### Constants (repeat in YAML; do not source bash from GHA)
+
+| Item | Value |
+|---|---|
+| Image | `salestax-api:0.1.0` |
+| Parent | `payments-api:2.0.0` |
+| Build name | `acme-lineage-salestax` |
+| Dockerfile context | `lab/app-from-intermediate` (`ARG BASE_IMAGE`) |
+| Predicate type | `https://jfrog.com/evidence/acme-docker-lineage/derived-from/v1` |
+
+### Catalog leftover
+
+`lineage-docker-local/fizz-service` may still exist on `tomjpd2` until deleted or overwritten. After a successful 03 run, AQL `@docker.label.com.acme.image.foo=bar` / `com.acme.image.golden=true` should hit **per-arch** `salestax-api` `manifest.json`, not `list.manifest.json`. No teardown script exists.
+
+### Git this thread (do not reverse remotes rules)
+
+| Commit | Where | What |
+|---|---|---|
+| `1470483` | `origin/main` | Native 03 + rename; `AGENT_LOG.md` and `SPEC.md` on internal tree |
+| `4244d42` | `external` `main` (`public` merge) | Same lab/workflows/FINDINGS; **stripped** `SPEC.md`, `AGENT_LOG.md`, old fizz workflow. Public 03 header is a plain description (no “Customer talking point”). `lib.sh` / FINDINGS chain have no SPEC links. |
+
+Refresh GitHub.com as usual: `git checkout public && git merge main`, re-`git rm` SPEC/DECK/PROBLEM/PPTX **and** `AGENT_LOG.md` if merge restores them, keep public README (no remotes), rewrite any restored `# Customer talking point:` on 03, `git push external public:main`, `git checkout main`. Never merge `public` into `main`. Never push `main` to `external`.
+
+Untracked locally and **not** committed: `output-examples/`, `raw-logs.txt`. `AGENT_LOG.md` **is** committed on `origin/main` only.
+
+### Next / do not
+
+- Next native migrate: **04** rename (copy in catalog, no Evidence). `setup-lab` still wraps 00, 04–08 (those jobs still have job-level `JF_ACCESS_TOKEN` — drop it when converting).
+- Do not re-add `fizz-service` / `GRANDCHILD_*` / `acme-lineage-grandchild`.
+- Do not attach golden digest on the salestax-api Evidence predicate.
+- Do not call `publish-salestax-api.sh` from GHA.
+
+---
+
 
 ## 2026-09-01 15:15 EDT — Inherited OCI labels live proof; drop `set-props` (this thread)
 
