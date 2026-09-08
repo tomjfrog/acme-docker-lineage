@@ -1,6 +1,7 @@
 # Customer talking point: rename without CI cooperation — same digests/layers,
-# no Evidence on the new name; Tier 2 layer matching still finds golden.
-# Copies payments-api:2.0.0 in the catalog to billing-service:9.9.9.
+# no Evidence and no Build Info on the new name; Tier 2 layer matching still finds golden.
+# Catalog-native: copies payments-api:2.0.0 in Artifactory to billing-service:9.9.9 —
+# does not chain GitHub run ids.
 name: 04 Rename without CI metadata
 
 on:
@@ -14,21 +15,132 @@ jobs:
   publish-rename:
     runs-on: ubuntu-latest
     env:
-      JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
-      EVIDENCE_SIGNING_KEY: ${{ secrets.EVIDENCE_SIGNING_KEY }}
       JF_URL: ${{ vars.JF_URL }}
       JF_DOCKER_REGISTRY: ${{ vars.JF_DOCKER_REGISTRY }}
+      DOCKER_REPO: lineage-docker-local
+      APP_NAME: payments-api
+      APP_TAG: 2.0.0
+      APP_RENAMED_NAME: billing-service
+      APP_RENAMED_TAG: 9.9.9
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup lab
-        uses: ./.github/actions/setup-lab
-        with:
-          jf_url: ${{ env.JF_URL }}
-          docker_registry: ${{ env.JF_DOCKER_REGISTRY }}
-          oidc_provider_name: ${{ secrets.OIDC_PROVIDER_NAME }}
-          write_evidence_key: "false"
-          image_tag: "9.9.9"
+      - name: Set job env
+        run: |
+          set -euo pipefail
+          APP="${JF_DOCKER_REGISTRY}/${DOCKER_REPO}/${APP_NAME}:${APP_TAG}"
+          RENAMED="${JF_DOCKER_REGISTRY}/${DOCKER_REPO}/${APP_RENAMED_NAME}:${APP_RENAMED_TAG}"
+          {
+            echo "CI=true"
+            echo "APP_IMAGE=${APP}"
+            echo "APP_RENAMED_IMAGE=${RENAMED}"
+            echo "OUT_DIR=lab/out/${GITHUB_RUN_NUMBER}"
+          } >> "${GITHUB_ENV}"
+          echo "Resolved app=${APP} renamed=${RENAMED}"
 
-      - name: Rename payments-api → billing-service (no Evidence)
-        run: ./lab/scripts/steps/publish-rename.sh
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Setup JFrog CLI (OIDC)
+        if: ${{ !env.ACT }}
+        id: setup-jfrog-cli
+        uses: jfrog/setup-jfrog-cli@v4
+        env:
+          JF_URL: ${{ env.JF_URL }}
+        with:
+          version: 2.120.0
+          oidc-provider-name: ${{ secrets.OIDC_PROVIDER_NAME }}
+
+      # JF_ACCESS_TOKEN stays scoped to this step: at job level it would override
+      # the OIDC exchange and break any later Evidence collection on other jobs.
+      - name: Setup JFrog CLI (access token)
+        if: ${{ env.ACT }}
+        uses: jfrog/setup-jfrog-cli@v4
+        env:
+          JF_URL: ${{ env.JF_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+        with:
+          version: 2.120.0
+
+      - name: Docker login to Artifactory (OIDC)
+        if: ${{ !env.ACT }}
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.JF_DOCKER_REGISTRY }}
+          username: ${{ steps.setup-jfrog-cli.outputs.oidc-user }}
+          password: ${{ steps.setup-jfrog-cli.outputs.oidc-token }}
+
+      - name: Docker login to Artifactory (act)
+        if: ${{ env.ACT }}
+        run: jf docker login "${JF_DOCKER_REGISTRY}"
+
+      # Source identity is the catalog payments-api tag from 02, not a prior GHA artifact.
+      # Index digest is the proof we will copy, not Dockerfile FROM.
+      - name: Inspect source payments-api in catalog
+        run: |
+          set -euo pipefail
+          if ! APP_MANIFEST="$(docker buildx imagetools inspect --format '{{json .Manifest}}' "${APP_IMAGE}")"; then
+            echo "::error::Could not inspect ${APP_IMAGE}. Dispatch 02 Publish payments-api from golden first."
+            exit 1
+          fi
+          APP_DIGEST="$(printf '%s' "${APP_MANIFEST}" | jq -r '.digest // empty')"
+          if [[ -z "${APP_DIGEST}" ]]; then
+            echo "::error::Empty index digest for ${APP_IMAGE}."
+            exit 1
+          fi
+          echo "APP_DIGEST=${APP_DIGEST}" >> "${GITHUB_ENV}"
+          echo "Source catalog ${APP_IMAGE}@${APP_DIGEST}"
+
+      # Carbon-copy the source index (or preserve a single manifest) onto the new name.
+      # --prefer-index=false keeps dest digest == source digest; the default wrap would
+      # mint a new index around a single-arch source and break the rename talking point.
+      # No rebuild, no GitHub attest, no jf rt build-publish, no jf evd create, no set-props.
+      - name: Copy payments-api → billing-service (no rebuild)
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --prefer-index=false \
+            --tag "${APP_RENAMED_IMAGE}" \
+            "${APP_IMAGE}"
+
+      - name: Confirm renamed digest matches source
+        run: |
+          set -euo pipefail
+          RENAMED_MANIFEST="$(docker buildx imagetools inspect --format '{{json .Manifest}}' "${APP_RENAMED_IMAGE}")"
+          RENAMED_DIGEST="$(printf '%s' "${RENAMED_MANIFEST}" | jq -r '.digest // empty')"
+          if [[ -z "${RENAMED_DIGEST}" ]]; then
+            echo "::error::Empty index digest for ${APP_RENAMED_IMAGE}."
+            exit 1
+          fi
+          echo "APP_RENAMED_DIGEST=${RENAMED_DIGEST}" >> "${GITHUB_ENV}"
+          if [[ "${RENAMED_DIGEST}" != "${APP_DIGEST}" ]]; then
+            echo "::error::Rename did not preserve digest. source=${APP_DIGEST} renamed=${RENAMED_DIGEST}"
+            exit 1
+          fi
+          echo "Renamed catalog ${APP_RENAMED_IMAGE}@${RENAMED_DIGEST} matches ${APP_NAME}:${APP_TAG}"
+
+      # Forensic snapshot of this copy into lab/out/<run>/ (uploaded as the job artifact).
+      # Pull linux/amd64 and record DiffIDs, index digest, platform digest, and source ref.
+      - name: Capture lineage artifacts (amd64 layers)
+        run: |
+          set -euo pipefail
+          RUN_DIR="${OUT_DIR}"
+          mkdir -p "${RUN_DIR}"
+          docker pull --platform linux/amd64 "${APP_RENAMED_IMAGE}"
+          PLATFORM_DIGEST="$(docker image inspect --format '{{index .RepoDigests 0}}' "${APP_RENAMED_IMAGE}" | sed -E 's/.*@//')"
+          docker image inspect --format '{{json .RootFS.Layers}}' "${APP_RENAMED_IMAGE}" | jq -r '.[]' > "${RUN_DIR}/app-renamed.layers.txt"
+          printf '%s\n' "${APP_RENAMED_DIGEST}" > "${RUN_DIR}/app-renamed.digest.txt"
+          printf '%s\n' "${PLATFORM_DIGEST}" > "${RUN_DIR}/app-renamed.amd64.digest.txt"
+          printf '%s\n' "${APP_RENAMED_IMAGE}" > "${RUN_DIR}/app-renamed.ref.txt"
+          printf '%s\n' "${APP_IMAGE}" > "${RUN_DIR}/app.ref.txt"
+          printf '%s\n' "${APP_DIGEST}" > "${RUN_DIR}/app.digest.txt"
+          echo "PLATFORM_DIGEST=${PLATFORM_DIGEST}" >> "${GITHUB_ENV}"
+          echo "RUN_DIR=${RUN_DIR}" >> "${GITHUB_ENV}"
+
+      - name: Upload this-run logs
+        if: ${{ !env.ACT }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: billing-service-${{ github.run_number }}-${{ env.APP_RENAMED_TAG }}
+          path: ${{ env.OUT_DIR }}/
+          if-no-files-found: warn

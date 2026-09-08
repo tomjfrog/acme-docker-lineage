@@ -4,6 +4,32 @@ Dated notes for later agents. Newest entry first. Product/lineage facts belong i
 
 ---
 
+## 2026-09-08 — Native GHA for 04 rename (billing-service)
+
+Human asked to migrate **04** to the same named native Actions pattern as 01–03, including auth/env compatibility from those workflows.
+
+### What we did
+
+1. Rewrote [`.github/workflows/04-rename-without-ci.yml`](.github/workflows/04-rename-without-ci.yml). It no longer calls `setup-lab` or [`lab/scripts/steps/publish-rename.sh`](lab/scripts/steps/publish-rename.sh). Local script stays for local/single-arch retag; GHA does not invoke it.
+2. Auth/env copied from 02/03: `vars.JF_URL` / `vars.JF_DOCKER_REGISTRY`; OIDC vs `env.ACT` token; **no** job-level `JF_ACCESS_TOKEN`; no `EVIDENCE_SIGNING_KEY` on the job; no `oidc-audience`; CLI 2.120.0. **Do not** `jf rt set-props`. No `attestations: write` (this job does not attest).
+3. Talking point is **copy in catalog, no CI metadata**: no GitHub attest, no `jf rt build-docker-create` / `build-publish`, no `jf evd create`. Constants: source `payments-api:2.0.0` (`APP_*` like 02), dest `billing-service:9.9.9` (`APP_RENAMED_*` from `lib.sh`).
+4. Multi-arch copy uses `docker buildx imagetools create --prefer-index=false --tag dest src` (carbon copy of an index; preserves a single manifest if 02 was ever single-arch). A local `docker tag` + `jf docker push` would flatten to one pulled platform. Dest digest **must** equal source digest; the confirm step fails otherwise. Missing source fails with “dispatch 02 first.”
+5. Capture artifacts: amd64 DiffIDs + index/platform digests as `app-renamed.*` (plus source `app.ref.txt` / `app.digest.txt`). Optional this-run upload only.
+
+### Do not
+
+- Do not attach Evidence or Build Info on `billing-service` — that is the demo.
+- Do not `jf rt set-props`.
+- Do not call `publish-rename.sh` from GHA.
+- Do not put `JF_ACCESS_TOKEN` in job `env:`.
+- Next native migrate is **05** (rogue-api). `setup-lab` still wraps 00, 05–08.
+
+### Git this thread
+
+`origin` = `github.jfrog.info:tomj/acme-docker-image.git` (`main`). `external` = `github.com:tomjfrog/acme-docker-lineage.git` (`public` → `external/main`). Never merge `public` into `main`. Never push `main` to `external`.
+
+---
+
 ## 2026-09-08 — Workflow 03: parse FROM, PARENT_*, split Evidence, comments
 
 Human closed after making 03 honest about the immediate parent and clearer to read. Product facts stay in `FINDINGS.md`. Do not re-learn the hardcoded-`APP_IMAGE` shortcut.
@@ -21,7 +47,7 @@ Human closed after making 03 honest about the immediate parent and clearer to re
 - Do not invent `APP_IMAGE=payments-api:2.0.0` in 03 workflow env.
 - Do not treat Dockerfile `FROM` as proof — it is the **claim**; SLSA ∩ catalog digest is the **proof**. Root-is-golden remains Evidence walk / layer-prefix in **06**.
 - Do not migrate 02 the same way unless asked (golden is still `GOLDEN_NAME`/`GOLDEN_TAG`).
-- Next native migrate is still **04**. Do not `jf rt set-props`.
+- Native 04 is done (see the newer 2026-09-08 entry). Next migrate is **05**. Do not `jf rt set-props`.
 
 ### Git this thread
 
@@ -71,7 +97,7 @@ Untracked locally and **not** committed: `output-examples/`, `raw-logs.txt`. `AG
 
 ### Next / do not
 
-- Next native migrate: **04** rename (copy in catalog, no Evidence). `setup-lab` still wraps 00, 04–08 (those jobs still have job-level `JF_ACCESS_TOKEN` — drop it when converting).
+- Native 04 is done. Next native migrate: **05** non-golden. `setup-lab` still wraps 00, 05–08 (those jobs still have job-level `JF_ACCESS_TOKEN` — drop it when converting).
 - Do not re-add `fizz-service` / `GRANDCHILD_*` / `acme-lineage-grandchild`.
 - Do not attach golden digest on the salestax-api Evidence predicate.
 - Do not call `publish-salestax-api.sh` from GHA.
@@ -362,20 +388,19 @@ Treat **01** as the pattern. Migrate one dispatchable workflow at a time. Keep s
 
 ### Dual-use of setup-lab until a workflow is native
 
-`.github/actions/setup-lab` still wraps 00 and 04–08 (01–03 are native). It already takes required `jf_url` + `docker_registry`, sets `BUILD_NUM` from run_number + optional `image_tag`, and splits OIDC vs token on `env.ACT`. Remaining native migrations should **stop calling setup-lab** (same as 01–03).
+`.github/actions/setup-lab` still wraps 00 and 05–08 (01–04 are native). It already takes required `jf_url` + `docker_registry`, sets `BUILD_NUM` from run_number + optional `image_tag`, and splits OIDC vs token on `env.ACT`. Remaining native migrations should **stop calling setup-lab** (same as 01–04).
 
-Caveat: 04–08 still set job-level `JF_ACCESS_TOKEN`. Safe while GitHub has **no** that secret. If anyone re-adds a dummy GitHub token, those jobs and any future attest post-step will regress. When converting a workflow, drop that job env line.
+Caveat: 05–08 still set job-level `JF_ACCESS_TOKEN`. Safe while GitHub has **no** that secret. If anyone re-adds a dummy GitHub token, those jobs and any future attest post-step will regress. When converting a workflow, drop that job env line.
 
 ### Still script-backed (migrate next, same pattern)
 
 | Workflow | Local script | Stable tag | Notes |
 |---|---|---|---|
-| 04 rename | `publish-rename.sh` | `9.9.9` | copy in catalog; no Evidence |
 | 05 non-golden | `publish-nongolden.sh` | `1.0.0` | negative control |
 | 06 detect | `02-detect-lineage.sh` | pull all tags | already catalog-native pulls |
 | 00 / 07–08 | `00-gen-keys.sh`, `gate-*.sh` | n/a | OIDC + setup-lab until rewritten |
 
-Native already: 01 golden, 02 payments-api, 03 salestax-api (`publish-salestax-api.sh` is local-only).
+Native already: 01 golden, 02 payments-api, 03 salestax-api, 04 billing-service rename (`publish-rename.sh` is local-only).
 
 Constants live in `lab/scripts/lib.sh`. Repeat them in workflow `env:` when going native so the YAML is readable without sourcing bash.
 
