@@ -1,7 +1,8 @@
-# Customer talking point: multi-hop salestax-api FROM payments-api with
-# immediate-parent-only Evidence — root-is-golden needs Evidence walk or
-# layer-prefix (Tier 1+2). Catalog-native: pulls payments-api:2.0.0 after
-# publish — does not chain GitHub run ids.
+# Customer talking point: multi-hop salestax-api FROM the Dockerfile parent
+# (not a hardcoded payments-api tag) with immediate-parent-only Evidence —
+# root-is-golden needs Evidence walk or layer-prefix (Tier 1+2). Catalog-native:
+# the parsed FROM is rewritten onto this JPD's registry host, then pulled —
+# does not chain GitHub run ids.
 name: 03 Publish salestax-api multi-hop
 
 on:
@@ -19,8 +20,7 @@ jobs:
       JF_URL: ${{ vars.JF_URL }}
       JF_DOCKER_REGISTRY: ${{ vars.JF_DOCKER_REGISTRY }}
       DOCKER_REPO: lineage-docker-local
-      APP_NAME: payments-api
-      APP_TAG: 2.0.0
+      DOCKERFILE: lab/app-from-intermediate/Dockerfile
       SALESTAX_NAME: salestax-api
       SALESTAX_TAG: 0.1.0
       BUILD_NAME: acme-lineage-salestax
@@ -32,18 +32,28 @@ jobs:
       - name: Set job env
         run: |
           set -euo pipefail
-          APP="${JF_DOCKER_REGISTRY}/${DOCKER_REPO}/${APP_NAME}:${APP_TAG}"
           SALESTAX="${JF_DOCKER_REGISTRY}/${DOCKER_REPO}/${SALESTAX_NAME}:${SALESTAX_TAG}"
           BNUM="${GITHUB_RUN_NUMBER}-${SALESTAX_TAG}"
           {
             echo "BUILD_NUM=${BNUM}"
             echo "CI=true"
-            echo "APP_IMAGE=${APP}"
             echo "SALESTAX_IMAGE=${SALESTAX}"
             echo "OUT_DIR=lab/out/${GITHUB_RUN_NUMBER}"
             echo "LINEAGE_PARENT_MATCH=false"
           } >> "${GITHUB_ENV}"
-          echo "Resolved BUILD_NUM=${BNUM} parent=${APP} salestax=${SALESTAX}"
+          echo "Resolved BUILD_NUM=${BNUM} salestax=${SALESTAX}"
+
+      # Parent identity comes from the last runtime FROM (ARG-expanded), not from
+      # workflow env. Registry host is rewritten to this JPD so the vet hits the
+      # catalog we just published into — the image name/tag still come from the Dockerfile.
+      # Sets env.PARENT_IMAGE, env.PARENT_NAME, env.PARENT_TAG, and env.DOCKERFILE_FROM.
+      - name: Resolve immediate parent from Dockerfile FROM
+        run: |
+          set -euo pipefail
+          python3 lab/scripts/resolve-dockerfile-from.py \
+            --dockerfile "${DOCKERFILE}" \
+            --registry "${JF_DOCKER_REGISTRY}" \
+            --github-env "${GITHUB_ENV}"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -94,7 +104,7 @@ jobs:
           provenance: mode=min
           tags: ${{ env.SALESTAX_IMAGE }}
           build-args: |
-            BASE_IMAGE=${{ env.APP_IMAGE }}
+            BASE_IMAGE=${{ env.PARENT_IMAGE }}
 
       - name: Record index digest
         run: |
@@ -120,33 +130,33 @@ jobs:
           jf rt build-collect-env "${BUILD_NAME}" "${BUILD_NUM}" || true
           jf rt build-publish "${BUILD_NAME}" "${BUILD_NUM}"
 
-      - name: Vet immediate parent payments-api (catalog vs BuildKit SLSA)
+      - name: Vet immediate parent (catalog vs BuildKit SLSA)
         run: |
           set -euo pipefail
           RUN_DIR="${OUT_DIR}"
           mkdir -p "${RUN_DIR}"
           echo "RUN_DIR=${RUN_DIR}" >> "${GITHUB_ENV}"
 
-          if ! APP_MANIFEST="$(docker buildx imagetools inspect --format '{{json .Manifest}}' "${APP_IMAGE}")"; then
-            echo "::warning::Could not inspect ${APP_IMAGE}. Skipping derived-from Evidence. Dispatch 02 Publish payments-api first."
+          if ! PARENT_MANIFEST="$(docker buildx imagetools inspect --format '{{json .Manifest}}' "${PARENT_IMAGE}")"; then
+            echo "::warning::Could not inspect ${PARENT_IMAGE}. Skipping derived-from Evidence. Dispatch 02 (or publish the Dockerfile parent) first."
             echo "LINEAGE_PARENT_MATCH=false" >> "${GITHUB_ENV}"
             exit 0
           fi
-          APP_DIGEST="$(printf '%s' "${APP_MANIFEST}" | jq -r '.digest // empty')"
-          if [[ -z "${APP_DIGEST}" ]]; then
-            echo "::warning::Empty payments-api index digest for ${APP_IMAGE}. Skipping derived-from Evidence."
+          PARENT_DIGEST="$(printf '%s' "${PARENT_MANIFEST}" | jq -r '.digest // empty')"
+          if [[ -z "${PARENT_DIGEST}" ]]; then
+            echo "::warning::Empty parent index digest for ${PARENT_IMAGE}. Skipping derived-from Evidence."
             echo "LINEAGE_PARENT_MATCH=false" >> "${GITHUB_ENV}"
             exit 0
           fi
-          echo "APP_DIGEST=${APP_DIGEST}" >> "${GITHUB_ENV}"
+          echo "PARENT_DIGEST=${PARENT_DIGEST}" >> "${GITHUB_ENV}"
 
-          ALLOWED="$(printf '%s' "${APP_MANIFEST}" | jq -r '
+          ALLOWED="$(printf '%s' "${PARENT_MANIFEST}" | jq -r '
             [
               .digest,
               (.manifests[]? | select((.platform.os // "") != "unknown") | .digest)
             ] | map(select(. != null and . != "")) | unique | .[]
           ')"
-          printf '%s\n' "${ALLOWED}" > "${RUN_DIR}/payments-api.allowed-digests.txt"
+          printf '%s\n' "${ALLOWED}" > "${RUN_DIR}/parent.allowed-digests.txt"
 
           if ! PROVENANCE="$(docker buildx imagetools inspect --format '{{json .Provenance}}' "${SALESTAX_IMAGE}")"; then
             echo "::warning::Could not inspect BuildKit provenance on ${SALESTAX_IMAGE}. Skipping derived-from Evidence."
@@ -178,10 +188,10 @@ jobs:
 
           if [[ "${MATCH}" == true ]]; then
             echo "LINEAGE_PARENT_MATCH=true" >> "${GITHUB_ENV}"
-            echo "salestax-api SLSA materials match payments-api catalog ${APP_IMAGE}@${APP_DIGEST}"
+            echo "salestax-api SLSA materials match parent catalog ${PARENT_IMAGE}@${PARENT_DIGEST}"
           else
             echo "LINEAGE_PARENT_MATCH=false" >> "${GITHUB_ENV}"
-            echo "::warning::salestax-api is not attested as derived-from payments-api (BuildKit materials do not match ${APP_IMAGE} index or platform digests)."
+            echo "::warning::salestax-api is not attested as derived-from ${PARENT_IMAGE} (BuildKit materials do not match parent index or platform digests)."
           fi
 
       - name: Capture lineage artifacts (amd64 layers)
@@ -195,9 +205,9 @@ jobs:
           printf '%s\n' "${SALESTAX_DIGEST}" > "${RUN_DIR}/salestax.digest.txt"
           printf '%s\n' "${PLATFORM_DIGEST}" > "${RUN_DIR}/salestax.amd64.digest.txt"
           printf '%s\n' "${SALESTAX_IMAGE}" > "${RUN_DIR}/salestax.ref.txt"
-          printf '%s\n' "${APP_IMAGE}" > "${RUN_DIR}/app.ref.txt"
-          if [[ -n "${APP_DIGEST:-}" ]]; then
-            printf '%s\n' "${APP_DIGEST}" > "${RUN_DIR}/app.digest.txt"
+          printf '%s\n' "${PARENT_IMAGE}" > "${RUN_DIR}/parent.ref.txt"
+          if [[ -n "${PARENT_DIGEST:-}" ]]; then
+            printf '%s\n' "${PARENT_DIGEST}" > "${RUN_DIR}/parent.digest.txt"
           fi
           echo "PLATFORM_DIGEST=${PLATFORM_DIGEST}" >> "${GITHUB_ENV}"
           echo "RUN_DIR=${RUN_DIR}" >> "${GITHUB_ENV}"
@@ -229,10 +239,10 @@ jobs:
           jq -n \
             --arg image_ref "${SALESTAX_IMAGE}" \
             --arg image_digest "${SALESTAX_DIGEST}" \
-            --arg base_image_ref "${APP_IMAGE}" \
-            --arg base_image_digest "${APP_DIGEST}" \
-            --arg base_package_name "${APP_NAME}" \
-            --arg base_package_version "${APP_TAG}" \
+            --arg base_image_ref "${PARENT_IMAGE}" \
+            --arg base_image_digest "${PARENT_DIGEST}" \
+            --arg base_package_name "${PARENT_NAME}" \
+            --arg base_package_version "${PARENT_TAG}" \
             --arg build_name "${BUILD_NAME}" \
             --arg build_number "${BUILD_NUM}" \
             --arg created_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
@@ -246,7 +256,7 @@ jobs:
               base_package_version: $base_package_version,
               derived_from_golden: false,
               immediate_parent_only: true,
-              note: "Immediate base is payments-api, not golden-base. Root golden requires Evidence walk or layer-prefix.",
+              note: ("Immediate base is " + $base_package_name + ", not golden-base. Root golden requires Evidence walk or layer-prefix."),
               lab: "acme-docker-lineage",
               build_name: $build_name,
               build_number: $build_number,
