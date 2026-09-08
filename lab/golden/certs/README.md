@@ -1,0 +1,1 @@
+Lab-only public CA (`acme-lab-root-ca.crt`) copied into the Golden image as a customer-analog corporate trust-store layer. Not a customer secret. SHA256 fingerprint: `2A:5B:41:A2:16:39:76:38:4C:0E:74:E7:9A:37:EB:2D:A2:1C:B1:41:79:45:80:62:C7:92:95:48:34:E2:D5:04`. Regenerate with `./gen-lab-ca.sh` (private key is gitignored).
