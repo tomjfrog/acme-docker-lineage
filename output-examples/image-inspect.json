@@ -1,0 +1,56 @@
+# docker image inspect tomjpd2.jfrog.io/lineage-docker-local/golden-base:1.0.1
+[
+    {
+        "Id": "sha256:148327c5ab1764ea5ac8d7d8406c19bea9f5d7fac245b50d39192e29d23abb44",
+        "RepoTags": [
+            "tomjpd2.jfrog.io/lineage-docker-local/golden-base:1.0.1"
+        ],
+        "RepoDigests": [
+            "tomjpd2.jfrog.io/lineage-docker-local/golden-base@sha256:148327c5ab1764ea5ac8d7d8406c19bea9f5d7fac245b50d39192e29d23abb44"
+        ],
+        "Comment": "buildkit.dockerfile.v0",
+        "Created": "2026-08-17T17:43:10.162071314-05:00",
+        "Config": {
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            ],
+            "Cmd": [
+                "cat",
+                "/etc/acme-golden-marker"
+            ],
+            "WorkingDir": "/",
+            "Labels": {
+                "com.acme.image.golden": "true",
+                "com.acme.image.role": "golden-base",
+                "org.opencontainers.image.title": "acme-golden-base"
+            },
+            "ArgsEscaped": true
+        },
+        "Architecture": "arm64",
+        "Os": "linux",
+        "Size": 4386781,
+        "RootFS": {
+            "Type": "layers",
+            "Layers": [
+                "sha256:88b4fba61c4c714a2fc173ddf7e9324a257304696830bf41ad28ecc58c11c95f",
+                "sha256:bb8d2900c1bf3b5e3062628f875961e7d29608fcc90c1faf668de6446469601a"
+            ]
+        },
+        "Metadata": {
+            "LastTagTime": "2026-08-26T22:33:31.003109281Z"
+        },
+        "Descriptor": {
+            "mediaType": "application/vnd.oci.image.index.v1+json",
+            "digest": "sha256:148327c5ab1764ea5ac8d7d8406c19bea9f5d7fac245b50d39192e29d23abb44",
+            "size": 855
+        },
+        "Identity": {
+            "Build": [
+                {
+                    "Ref": "q65fpiwjcyjgqyo51c06sz96g",
+                    "CreatedAt": "2026-08-26T17:33:31.006187739-05:00"
+                }
+            ]
+        }
+    }
+]
