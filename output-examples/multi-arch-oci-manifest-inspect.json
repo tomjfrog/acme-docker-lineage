@@ -1,0 +1,69 @@
+# docker manifest inspect tomjpd2.jfrog.io/lineage-docker-local/golden-base:1.0.1 -v
+[
+	{
+		"Ref": "tomjpd2.jfrog.io/lineage-docker-local/golden-base:1.0.1@sha256:b2f790a4535e7c0d357a0bb0afd46b58ad127978ca7e66d5b55adf351e582b5e",
+		"Descriptor": {
+			"mediaType": "application/vnd.oci.image.manifest.v1+json",
+			"digest": "sha256:b2f790a4535e7c0d357a0bb0afd46b58ad127978ca7e66d5b55adf351e582b5e",
+			"size": 672,
+			"platform": {
+				"architecture": "arm64",
+				"os": "linux"
+			}
+		},
+		"Raw": "ewogICJzY2hlbWFWZXJzaW9uIjogMiwKICAibWVkaWFUeXBlIjogImFwcGxpY2F0aW9uL3ZuZC5vY2kuaW1hZ2UubWFuaWZlc3QudjEranNvbiIsCiAgImNvbmZpZyI6IHsKICAgICJtZWRpYVR5cGUiOiAiYXBwbGljYXRpb24vdm5kLm9jaS5pbWFnZS5jb25maWcudjEranNvbiIsCiAgICAiZGlnZXN0IjogInNoYTI1NjplMTRmNDE1YzUzMmI3Njk1YmE4MDJkZDM1Y2FjNDc2YzU1Mzk0OTg0YTdjN2YwMWFjZWRiZTE5NWNlZmE5NzRiIiwKICAgICJzaXplIjogMTQ5MQogIH0sCiAgImxheWVycyI6IFsKICAgIHsKICAgICAgIm1lZGlhVHlwZSI6ICJhcHBsaWNhdGlvbi92bmQub2NpLmltYWdlLmxheWVyLnYxLnRhcitnemlwIiwKICAgICAgImRpZ2VzdCI6ICJzaGEyNTY6M2YyNmJjMmRlYzBiNTE1ZjFjMjgxOGY2ZTEzYThmMWRhMWY4ODE3OWEwMDg0NDVkNGU1ODcyMzMzODZiZmY3OCIsCiAgICAgICJzaXplIjogNDA5MjMxOQogICAgfSwKICAgIHsKICAgICAgIm1lZGlhVHlwZSI6ICJhcHBsaWNhdGlvbi92bmQub2NpLmltYWdlLmxheWVyLnYxLnRhcitnemlwIiwKICAgICAgImRpZ2VzdCI6ICJzaGEyNTY6NTNlMzFjNTQ5YWM3NjdlZmI1MDBiMjVjYzlmM2U2NjQ1ZDQxZjIwYzI4ZTk2ZDUxNDhlYTY1MmVjOWFkODNlNCIsCiAgICAgICJzaXplIjogMjkxNDQ0CiAgICB9CiAgXQp9",
+		"OCIManifest": {
+			"schemaVersion": 2,
+			"mediaType": "application/vnd.oci.image.manifest.v1+json",
+			"config": {
+				"mediaType": "application/vnd.oci.image.config.v1+json",
+				"digest": "sha256:e14f415c532b7695ba802dd35cac476c55394984a7c7f01acedbe195cefa974b",
+				"size": 1491
+			},
+			"layers": [
+				{
+					"mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+					"digest": "sha256:3f26bc2dec0b515f1c2818f6e13a8f1da1f88179a008445d4e587233386bff78",
+					"size": 4092319
+				},
+				{
+					"mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+					"digest": "sha256:53e31c549ac767efb500b25cc9f3e6645d41f20c28e96d5148ea652ec9ad83e4",
+					"size": 291444
+				}
+			]
+		}
+	},
+	{
+		"Ref": "tomjpd2.jfrog.io/lineage-docker-local/golden-base:1.0.1@sha256:71d36e7bc2bf7739967e2330958f5f379d9264c5c3749966084031735559937a",
+		"Descriptor": {
+			"mediaType": "application/vnd.oci.image.manifest.v1+json",
+			"digest": "sha256:71d36e7bc2bf7739967e2330958f5f379d9264c5c3749966084031735559937a",
+			"size": 564,
+			"platform": {
+				"architecture": "unknown",
+				"os": "unknown"
+			}
+		},
+		"Raw": "ewogICJzY2hlbWFWZXJzaW9uIjogMiwKICAibWVkaWFUeXBlIjogImFwcGxpY2F0aW9uL3ZuZC5vY2kuaW1hZ2UubWFuaWZlc3QudjEranNvbiIsCiAgImNvbmZpZyI6IHsKICAgICJtZWRpYVR5cGUiOiAiYXBwbGljYXRpb24vdm5kLm9jaS5pbWFnZS5jb25maWcudjEranNvbiIsCiAgICAiZGlnZXN0IjogInNoYTI1NjpjOGU2YzQ4MjhkNzQ1NWJhMTkxZTFhNzgxMDllNDc3MzRlZWE1MjAzNTY0M2I4OThiYmVkNTIyNDk4Yzg3MWUxIiwKICAgICJzaXplIjogMTY3CiAgfSwKICAibGF5ZXJzIjogWwogICAgewogICAgICAibWVkaWFUeXBlIjogImFwcGxpY2F0aW9uL3ZuZC5pbi10b3RvK2pzb24iLAogICAgICAiZGlnZXN0IjogInNoYTI1Njo3NTBhNWEyNzA0ZjAwZDAzMTNlMzdkNDAwNjBiZjg5YjdhNDgzZDVkOTk2M2UzYzM3OTcxNWM3NmQ0OTRkNGQ3IiwKICAgICAgInNpemUiOiAxNTkxLAogICAgICAiYW5ub3RhdGlvbnMiOiB7CiAgICAgICAgImluLXRvdG8uaW8vcHJlZGljYXRlLXR5cGUiOiAiaHR0cHM6Ly9zbHNhLmRldi9wcm92ZW5hbmNlL3YxIgogICAgICB9CiAgICB9CiAgXQp9",
+		"OCIManifest": {
+			"schemaVersion": 2,
+			"mediaType": "application/vnd.oci.image.manifest.v1+json",
+			"config": {
+				"mediaType": "application/vnd.oci.image.config.v1+json",
+				"digest": "sha256:c8e6c4828d7455ba191e1a78109e47734eea52035643b898bbed522498c871e1",
+				"size": 167
+			},
+			"layers": [
+				{
+					"mediaType": "application/vnd.in-toto+json",
+					"digest": "sha256:750a5a2704f00d0313e37d40060bf89b7a483d5d9963e3c379715c76d494d4d7",
+					"size": 1591,
+					"annotations": {
+						"in-toto.io/predicate-type": "https://slsa.dev/provenance/v1"
+					}
+				}
+			]
+		}
+	}
+]
