@@ -42,6 +42,8 @@ Creates or reconciles:
 
 Re-run bootstrap to verify idempotency: each step checks whether the resource already exists (GET/list) and **skips** create/update when nothing is missing. Incompatible drift (e.g. repo owned by another project) still fails loudly.
 
+**Agents:** before adding platform provisioning, read **`jfrog`**, **`jfrog-xray-policies-watches`**, **`jfrog-lifecycle-stages`**, and **`jfrog-apptrust-gates`** skills (and lab `jf_api` patterns in `lab/scripts/03-apptrust-gate.sh`). Run `jf … --help` for any subcommand you script; use watch templates in the Xray skill, not ad-hoc JSON.
+
 ## Release a Golden Alpine version
 
 Workflow **10 Release Golden Alpine** (`.github/workflows/10-release-golden-alpine.yml`).
