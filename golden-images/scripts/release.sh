@@ -63,7 +63,7 @@ verify_build_info_digest() {
 
   # build-docker-create often records per-arch manifest digests, not the OCI index digest.
   local tag_ref="${REGISTRY_HOST}/${DEV_REPO}/${IMAGE_NAME}:${APP_VERSION}"
-  local resolved_index platform_digest matched
+  local resolved_index="" platform_digest="" matched=""
   if ! resolved_index="$(docker buildx imagetools inspect "${tag_ref}" --format '{{json .Manifest}}' 2>/dev/null \
     | jq -r '.digest // empty')"; then
     gi_die "Build Info ${BUILD_NAME}/${BUILD_NUMBER} does not reference ${INDEX_DIGEST} (and could not inspect ${tag_ref})"
