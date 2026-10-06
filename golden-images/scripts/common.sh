@@ -8,7 +8,7 @@ GI_CATALOG="${GI_CATALOG:-${GI_ROOT}/catalog.json}"
 GI_INVENTORY="${GI_INVENTORY:-${GI_ROOT}/platform-inventory.json}"
 
 gi_die() { echo "golden-images: $*" >&2; exit 1; }
-gi_log() { printf '==> %s\n' "$*"; }
+gi_log() { printf '==> %s\n' "$*" >&2; }
 
 gi_require_tools() {
   command -v jq >/dev/null 2>&1 || gi_die "jq is required"
