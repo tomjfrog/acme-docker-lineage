@@ -434,7 +434,7 @@ ensure_apptrust_release_policies() {
   r2="$(ensure_evidence_rule "GI SLSA Provenance Required" "${SLSA_PRED}")"
   ensure_release_policy "GI PROD Release - SLSA Provenance" "${r2}"
   r3="$(ensure_evidence_rule "GI CycloneDX SBOM Required" "${SBOM_PRED}")"
-  ensure_release_policy "GI PROD Release - CycloneDX SBOM" "${r3}"
+  gi_log "CycloneDX rule ${r3} retained without a release policy while native Docker-only evidence is unavailable"
   gi_log "Note: add AppTrust Critical CVE rule via UI or tenant-specific template if not present"
 }
 

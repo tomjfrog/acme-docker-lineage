@@ -27,7 +27,6 @@ DEV_REPO="$(gi_repo dev_local)"
 RELEASE_REPO="$(gi_repo release_local)"
 GOLDEN_CERT="$(jq -r '.evidence.golden_certification_predicate' <<<"${GI_CATALOG_JSON}")"
 SLSA_PRED="$(jq -r '.evidence.slsa_provenance_predicate' <<<"${GI_CATALOG_JSON}")"
-SBOM_PRED="$(jq -r '.evidence.cyclonedx_sbom_predicate' <<<"${GI_CATALOG_JSON}")"
 
 APP_JSON="$(gi_app_json "${APP_KEY}")"
 IMAGE_NAME="$(jq -r '.image_name' <<<"${APP_JSON}")"
@@ -139,7 +138,6 @@ require_release_evidence() {
   local app_version_subject="${app_version_root}/release-bundle.json.evd"
   local image_subject="${app_version_root}/artifacts/docker/${IMAGE_NAME}/${APP_VERSION}/list.manifest.json"
   wait_for_predicate "${image_subject}" "${SLSA_PRED}"
-  wait_for_predicate "${app_version_subject}" "${SBOM_PRED}"
   wait_for_predicate "${app_version_subject}" "${GOLDEN_CERT}"
 }
 

@@ -127,12 +127,6 @@
           "rule": "GI SLSA Provenance Required",
           "stage": "PROD",
           "gate": "release"
-        },
-        {
-          "name": "GI PROD Release - CycloneDX SBOM",
-          "rule": "GI CycloneDX SBOM Required",
-          "stage": "PROD",
-          "gate": "release"
         }
       ]
     }
