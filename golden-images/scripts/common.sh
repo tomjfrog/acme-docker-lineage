@@ -130,3 +130,29 @@ gi_json_equal() {
   local a="$1" b="$2"
   [[ "$(jq -cS . <<<"${a}")" == "$(jq -cS . <<<"${b}")" ]]
 }
+
+# Unified Policy list responses: never use (.items // .)[] on a bare object — that
+# iterates object values and breaks on .id (strings). Only .items[] or a top-level array.
+gi_up_entity_id_by_name() {
+  local json="$1" name="$2"
+  jq -r --arg n "${name}" '
+    def entity_list:
+      if type == "array" then .
+      elif type == "object" and (.items | type) == "array" then .items
+      else [] end;
+    entity_list[]
+    | select(type == "object" and .name == $n)
+    | .id // empty
+    | select(length > 0)
+  ' <<<"${json}" | head -1
+}
+
+# Create responses may be {"id":"…"} or a JSON string id.
+gi_up_response_id() {
+  local json="$1"
+  jq -r '
+    if type == "object" then .id // .rule_id // .policy_id // empty
+    elif type == "string" then .
+    else empty end
+  ' <<<"${json}" | head -1
+}

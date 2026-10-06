@@ -327,7 +327,8 @@ find_rule_template_id() {
   # rule-templates listing is optional; many SaaS tenants only expose /rules.
   local from_api=""
   from_api="$(gi_jf_api /unifiedpolicy/api/v1/rule-templates 2>/dev/null \
-    | jq -r '(.items // .)[] | select(.id == "1007" or .id == 1007) | .id' | head -1 || true)"
+    | jq -r '(.items // [])[] | select(type == "object" and (.id == "1007" or .id == 1007)) | .id' \
+    | head -1 || true)"
   if [[ -n "${from_api}" && "${from_api}" != "null" ]]; then
     printf '%s\n' "${from_api}"
   else
@@ -340,7 +341,7 @@ ensure_evidence_rule() {
   [[ "${DRY_RUN}" == "1" ]] && return 0
   local rules rule_id template_id
   rules="$(gi_jf_api /unifiedpolicy/api/v1/rules)"
-  rule_id="$(echo "${rules}" | jq -r --arg n "${rule_name}" '(.items // .)[] | select(.name==$n) | .id' | head -1)"
+  rule_id="$(gi_up_entity_id_by_name "${rules}" "${rule_name}")"
   template_id="$(find_rule_template_id "predicateType")"
   [[ -n "${template_id}" && "${template_id}" != "null" ]] \
     || template_id="1007"
@@ -360,25 +361,31 @@ ensure_evidence_rule() {
     gi_log "Unified Policy rule ${rule_name} exists (${rule_id})"
   else
     if out="$(gi_jf_request_json_try POST /unifiedpolicy/api/v1/rules "${body}")"; then
-      rule_id="$(jq -r '.id' <<<"${out}")"
+      rule_id="$(gi_up_response_id "${out}")"
+      [[ -n "${rule_id}" ]] || rule_id="$(gi_up_entity_id_by_name "$(gi_jf_api /unifiedpolicy/api/v1/rules)" "${rule_name}")"
+      [[ -n "${rule_id}" ]] || gi_die "created rule ${rule_name} but could not parse id from: ${out}"
       gi_log "Created rule ${rule_name} (${rule_id})"
     else
       rules="$(gi_jf_api /unifiedpolicy/api/v1/rules)"
-      rule_id="$(echo "${rules}" | jq -r --arg n "${rule_name}" '(.items // .)[] | select(.name==$n) | .id' | head -1)"
-      [[ -n "${rule_id}" && "${rule_id}" != "null" ]] \
-        || gi_die "failed to create Unified Policy rule ${rule_name}"
+      rule_id="$(gi_up_entity_id_by_name "${rules}" "${rule_name}")"
+      [[ -n "${rule_id}" ]] \
+        || gi_die "failed to create Unified Policy rule ${rule_name}: ${GI_JF_LAST_API_ERROR:-unknown}"
       gi_log "Unified Policy rule ${rule_name} exists (${rule_id})"
     fi
   fi
+  [[ -n "${rule_id}" && "${rule_id}" != "null" ]] \
+    || gi_die "missing rule id for ${rule_name}"
   printf '%s\n' "${rule_id}"
 }
 
 ensure_release_policy() {
   local policy_name="$1" rule_id="$2"
   [[ "${DRY_RUN}" == "1" ]] && return 0
+  [[ -n "${rule_id}" && "${rule_id}" != "null" ]] \
+    || gi_die "release policy ${policy_name} requires a rule id"
   local pols pol_id
   pols="$(gi_jf_api "/unifiedpolicy/api/v1/policies?projectKey=${PROJECT_KEY}")"
-  pol_id="$(echo "${pols}" | jq -r --arg n "${policy_name}" '(.items // .)[] | select(.name==$n) | .id' | head -1)"
+  pol_id="$(gi_up_entity_id_by_name "${pols}" "${policy_name}")"
   local body
   body="$(jq -n \
     --arg name "${policy_name}" \
@@ -402,9 +409,9 @@ ensure_release_policy() {
     return 0
   fi
   pols="$(gi_jf_api "/unifiedpolicy/api/v1/policies?projectKey=${PROJECT_KEY}")"
-  pol_id="$(echo "${pols}" | jq -r --arg n "${policy_name}" '(.items // .)[] | select(.name==$n) | .id' | head -1)"
-  [[ -n "${pol_id}" && "${pol_id}" != "null" ]] \
-    || gi_die "failed to create release policy ${policy_name}"
+  pol_id="$(gi_up_entity_id_by_name "${pols}" "${policy_name}")"
+  [[ -n "${pol_id}" ]] \
+    || gi_die "failed to create release policy ${policy_name}: ${GI_JF_LAST_API_ERROR:-unknown}"
   gi_log "Unified Policy release policy ${policy_name} exists"
 }
 
