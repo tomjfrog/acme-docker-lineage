@@ -16,6 +16,14 @@ assert_ok "find id in top-level array" test \
 assert_ok "object root without items does not jq-fail" test \
   "$(gi_up_entity_id_by_name '{"name":"stray","id":"x"}' 'stray' || true)" = ""
 
+assert_ok "find evidence predicate by rule name" test \
+  "$(gi_up_rule_predicate_by_name \
+    '{"items":[{"name":"SBOM","parameters":[{"name":"predicateType","value":"https://jfrog.com/evidence/cyclonedx/vex/v1.6"}]}]}' \
+    'SBOM')" = "https://jfrog.com/evidence/cyclonedx/vex/v1.6"
+
+assert_ok "missing evidence predicate is empty" test \
+  "$(gi_up_rule_predicate_by_name '{"items":[{"name":"Other","parameters":[]}]}' 'SBOM')" = ""
+
 assert_ok "response object id" test \
   "$(gi_up_response_id '{"id":"rule-1","name":"n"}')" = "rule-1"
 

@@ -115,6 +115,7 @@ jobs:
           context: golden-images/alpine
           push: true
           platforms: linux/amd64,linux/arm64
+          provenance: false
           build-args: |
             BASE_IMAGE=${{ env.BASE_IMAGE }}
           tags: ${{ env.GOLDEN_IMAGE }}

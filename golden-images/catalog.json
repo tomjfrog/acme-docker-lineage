@@ -18,7 +18,7 @@
   "evidence": {
     "golden_certification_predicate": "https://acme.example/evidence/golden-image-certification/v1",
     "slsa_provenance_predicate": "https://slsa.dev/provenance/v1",
-    "cyclonedx_sbom_predicate": "https://jfrog.com/evidence/cyclonedx/sbom/v1.6"
+    "cyclonedx_sbom_predicate": "https://jfrog.com/evidence/cyclonedx/vex/v1.6"
   },
   "applications": [
     {

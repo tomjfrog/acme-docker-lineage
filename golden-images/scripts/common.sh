@@ -216,6 +216,21 @@ gi_up_entity_id_by_name() {
   ' <<<"${json}" | head -1
 }
 
+gi_up_rule_predicate_by_name() {
+  local json="$1" name="$2"
+  jq -r --arg n "${name}" '
+    def entity_list:
+      if type == "array" then .
+      elif type == "object" and (.items | type) == "array" then .items
+      else [] end;
+    entity_list[]
+    | select(type == "object" and .name == $n)
+    | (.parameters // [])[]
+    | select(.name == "predicateType")
+    | .value // empty
+  ' <<<"${json}" | head -1
+}
+
 # Create responses may be {"id":"…"} or a JSON string id.
 gi_up_response_id() {
   local json="$1"

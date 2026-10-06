@@ -339,9 +339,10 @@ find_rule_template_id() {
 ensure_evidence_rule() {
   local rule_name="$1" predicate_uri="$2"
   [[ "${DRY_RUN}" == "1" ]] && return 0
-  local rules rule_id template_id
+  local rules rule_id current_predicate template_id
   rules="$(gi_jf_api /unifiedpolicy/api/v1/rules)"
   rule_id="$(gi_up_entity_id_by_name "${rules}" "${rule_name}")"
+  current_predicate="$(gi_up_rule_predicate_by_name "${rules}" "${rule_name}")"
   template_id="$(find_rule_template_id "predicateType")"
   [[ -n "${template_id}" && "${template_id}" != "null" ]] \
     || template_id="1007"
@@ -358,7 +359,14 @@ ensure_evidence_rule() {
       parameters: [{name: "predicateType", value: $pred}]
     }')"
   if [[ -n "${rule_id}" && "${rule_id}" != "null" ]]; then
-    gi_log "Unified Policy rule ${rule_name} exists (${rule_id})"
+    if [[ "${current_predicate}" == "${predicate_uri}" ]]; then
+      gi_log "Unified Policy rule ${rule_name} exists (${rule_id})"
+    else
+      local update_body
+      update_body="$(jq 'del(.is_custom)' <<<"${body}")"
+      gi_jf_request_json "PUT" "/unifiedpolicy/api/v1/rules/${rule_id}" "${update_body}" >/dev/null
+      gi_log "Updated Unified Policy rule ${rule_name} predicate (${rule_id})"
+    fi
   else
     if out="$(gi_jf_request_json_try POST /unifiedpolicy/api/v1/rules "${body}")"; then
       rule_id="$(gi_up_response_id "${out}")"
