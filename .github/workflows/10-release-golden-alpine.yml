@@ -159,8 +159,9 @@ jobs:
             --build-number "${BUILD_NUM}" \
             --project="${PROJECT_KEY}" \
             --server-id "${SERVER_ID}"
+          # build-collect-env accepts --project only (no --server-id); verified via jf rt build-collect-env --help
           jf rt build-collect-env "${BUILD_NAME}" "${BUILD_NUM}" \
-            --project="${PROJECT_KEY}" --server-id "${SERVER_ID}"
+            --project="${PROJECT_KEY}" || true
           jf rt build-publish "${BUILD_NAME}" "${BUILD_NUM}" \
             --project="${PROJECT_KEY}" --server-id "${SERVER_ID}"
 
