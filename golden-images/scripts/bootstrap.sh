@@ -27,17 +27,6 @@ APP_NAME="$(jq -r '.application_name' <<<"${APP_JSON}")"
 BUILD_NAME="$(jq -r '.build_name' <<<"${APP_JSON}")"
 BUILD_INFO_REPO="$(gi_build_info_repo)"
 
-gi_jf_api() {
-  jf api --server-id "${SERVER_ID}" "$@"
-}
-
-gi_jf_post_json() {
-  local method="$1" path="$2" body="$3"
-  gi_jf_api -X "${method}" "${path}" \
-    -H "Content-Type: application/json" \
-    -d "${body}"
-}
-
 gi_preflight() {
   gi_log "Preflight JFrog CLI and APIs"
   jf --version >/dev/null
@@ -58,19 +47,24 @@ ensure_project() {
   fi
   [[ "${DRY_RUN}" == "1" ]] && { gi_log "DRY_RUN: would create project ${PROJECT_KEY}"; return 0; }
   gi_log "Creating project ${PROJECT_KEY}"
-  gi_jf_post_json POST /access/api/v1/projects "{
-      \"project_key\": \"${PROJECT_KEY}\",
-      \"display_name\": \"${PROJECT_NAME}\",
-      \"description\": \"Golden Image Management — approved base images\",
-      \"admin_privileges\": {
-        \"manage_members\": true,
-        \"manage_resources\": true,
-        \"manage_security_assets\": true,
-        \"index_resources\": true,
-        \"allow_ignore_rules\": true
+  local body
+  body="$(jq -n \
+    --arg pk "${PROJECT_KEY}" \
+    --arg dn "${PROJECT_NAME}" \
+    '{
+      project_key: $pk,
+      display_name: $dn,
+      description: "Golden Image Management — approved base images",
+      admin_privileges: {
+        manage_members: true,
+        manage_resources: true,
+        manage_security_assets: true,
+        index_resources: true,
+        allow_ignore_rules: true
       },
-      \"storage_quota_bytes\": -1
-    }"
+      storage_quota_bytes: -1
+    }')"
+  gi_jf_request_json POST /access/api/v1/projects "${body}"
 }
 
 ensure_docker_repo() {
@@ -111,7 +105,7 @@ ensure_docker_repo() {
         environments: [$env]
       }')"
   fi
-  gi_jf_post_json PUT "/artifactory/api/repositories/${key}" "${payload}"
+  gi_jf_request_json PUT "/artifactory/api/repositories/${key}" "${payload}"
 }
 
 assign_repo_environments() {
@@ -125,14 +119,15 @@ assign_repo_environments() {
   local merged
   merged="$(echo "${cur}" | jq --argjson add "${envs_json}" \
     '.environments = ((.environments // []) + $add | unique)')"
-  gi_jf_post_json POST "/artifactory/api/repositories/${key}" "${merged}" >/dev/null
+  gi_jf_request_json POST "/artifactory/api/repositories/${key}" "${merged}" >/dev/null
   gi_log "Updated environments on ${key}"
 }
 
 ensure_lifecycle() {
   [[ "${DRY_RUN}" == "1" ]] && return 0
-  gi_jf_post_json PATCH "/access/api/v2/lifecycle/?project_key=${PROJECT_KEY}" \
-    "{\"project_key\":\"${PROJECT_KEY}\",\"promote_stages\":[\"DEV\",\"PROD\"]}"
+  gi_jf_request_json PATCH "/access/api/v2/lifecycle/?project_key=${PROJECT_KEY}" \
+    "$(jq -n --arg pk "${PROJECT_KEY}" \
+      '{project_key: $pk, promote_stages: ["DEV", "PROD"]}')"
   gi_log "Lifecycle promote_stages: DEV → PROD"
 }
 
@@ -159,9 +154,7 @@ index_xray_repo() {
     cur="$(jq -n --arg r "${repo}" '{repo_name: $r, repo_config: {}}')"
   fi
   payload="$(echo "${cur}" | jq '.repo_config.retention_in_days = 90')"
-  gi_jf_api -X PUT /xray/api/v1/repos_config \
-    -H "Content-Type: application/json" \
-    -d "${payload}" >/dev/null
+  gi_jf_request_json PUT /xray/api/v1/repos_config "${payload}" >/dev/null
   gi_log "Indexed Xray repo ${repo}"
 }
 
@@ -171,9 +164,7 @@ index_build() {
   cur="$(gi_jf_api "/xray/api/v1/binMgr/default/builds?projectKey=${PROJECT_KEY}")"
   new="$(echo "${cur}" | jq --arg b "${BUILD_NAME}" \
     'if (.indexed_builds // []) | index($b) then . else .indexed_builds = ((.indexed_builds // []) + [$b]) end')"
-  gi_jf_api -X PUT "/xray/api/v1/binMgr/default/builds?projectKey=${PROJECT_KEY}" \
-    -H "Content-Type: application/json" \
-    -d "${new}" >/dev/null
+  gi_jf_request_json PUT "/xray/api/v1/binMgr/default/builds?projectKey=${PROJECT_KEY}" "${new}" >/dev/null
   gi_log "Indexed build ${BUILD_NAME} for project ${PROJECT_KEY}"
 }
 
@@ -184,44 +175,46 @@ ensure_xray_policy_watch() {
 
   if ! gi_jf_api "/xray/api/v2/policies/${pol_name}?projectKey=${PROJECT_KEY}" >/dev/null 2>&1; then
     gi_log "Creating Xray policy ${pol_name}"
-    gi_jf_api -X POST "/xray/api/v2/policies?projectKey=${PROJECT_KEY}" \
-      -H "Content-Type: application/json" \
-      -d "{
-        \"name\": \"${pol_name}\",
-        \"description\": \"Fail builds with Critical CVEs (Golden Image CI)\",
-        \"type\": \"security\",
-        \"rules\": [{
-          \"name\": \"critical-cve\",
-          \"priority\": 1,
-          \"criteria\": {
-            \"min_severity\": \"Critical\"
-          },
-          \"actions\": {
-            \"fail_build\": true,
-            \"block_download\": { \"active\": false, \"unscanned\": false }
+    gi_jf_request_json POST "/xray/api/v2/policies?projectKey=${PROJECT_KEY}" \
+      "$(jq -n --arg name "${pol_name}" '{
+        name: $name,
+        description: "Fail builds with Critical CVEs (Golden Image CI)",
+        type: "security",
+        rules: [{
+          name: "critical-cve",
+          priority: 1,
+          criteria: { min_severity: "Critical" },
+          actions: {
+            fail_build: true,
+            block_download: { active: false, unscanned: false }
           }
         }]
-      }" >/dev/null
+      }')" >/dev/null
   else
     gi_log "Xray policy ${pol_name} exists"
   fi
 
   if ! gi_jf_api "/xray/api/v2/watches/${watch_name}?projectKey=${PROJECT_KEY}" >/dev/null 2>&1; then
     gi_log "Creating Xray watch ${watch_name}"
-    gi_jf_api -X POST "/xray/api/v2/watches?projectKey=${PROJECT_KEY}" \
-      -H "Content-Type: application/json" \
-      -d "{
-        \"name\": \"${watch_name}\",
-        \"description\": \"Golden DEV docker repo + project build-info\",
-        \"active\": true,
-        \"project_resources\": {
-          \"resources\": [
-            {\"type\": \"repository\", \"name\": \"${DEV_REPO}\"},
-            {\"type\": \"build\", \"name\": \"${BUILD_NAME}\", \"build_repo\": \"${BUILD_INFO_REPO}\"}
-          ]
-        },
-        \"policies\": [{\"name\": \"${pol_name}\", \"type\": \"security\"}]
-      }" >/dev/null
+    gi_jf_request_json POST "/xray/api/v2/watches?projectKey=${PROJECT_KEY}" \
+      "$(jq -n \
+        --arg name "${watch_name}" \
+        --arg dev "${DEV_REPO}" \
+        --arg build "${BUILD_NAME}" \
+        --arg build_repo "${BUILD_INFO_REPO}" \
+        --arg pol "${pol_name}" \
+        '{
+          name: $name,
+          description: "Golden DEV docker repo + project build-info",
+          active: true,
+          project_resources: {
+            resources: [
+              { type: "repository", name: $dev },
+              { type: "build", name: $build, build_repo: $build_repo }
+            ]
+          },
+          policies: [{ name: $pol, type: "security" }]
+        }')" >/dev/null
   else
     gi_log "Xray watch ${watch_name} exists"
   fi
@@ -262,14 +255,10 @@ ensure_evidence_rule() {
       parameters: [{name: "predicateType", value: $pred}]
     }')"
   if [[ -n "${rule_id}" && "${rule_id}" != "null" ]]; then
-    gi_jf_api -X PUT "/unifiedpolicy/api/v1/rules/${rule_id}" \
-      -H "Content-Type: application/json" \
-      -d "${body}" >/dev/null
+    gi_jf_request_json PUT "/unifiedpolicy/api/v1/rules/${rule_id}" "${body}" >/dev/null
     gi_log "Updated rule ${rule_name}"
   else
-    rule_id="$(gi_jf_api -X POST /unifiedpolicy/api/v1/rules \
-      -H "Content-Type: application/json" \
-      -d "${body}" | jq -r '.id')"
+    rule_id="$(gi_jf_request_json POST /unifiedpolicy/api/v1/rules "${body}" | jq -r '.id')"
     gi_log "Created rule ${rule_name} (${rule_id})"
   fi
   printf '%s\n' "${rule_id}"
@@ -296,14 +285,10 @@ ensure_release_policy() {
       scope: {type: "project", project_keys: [$proj]}
     }')"
   if [[ -n "${pol_id}" && "${pol_id}" != "null" ]]; then
-    gi_jf_api -X PUT "/unifiedpolicy/api/v1/policies/${pol_id}" \
-      -H "Content-Type: application/json" \
-      -d "${body}" >/dev/null
+    gi_jf_request_json PUT "/unifiedpolicy/api/v1/policies/${pol_id}" "${body}" >/dev/null
     gi_log "Updated policy ${policy_name}"
   else
-    gi_jf_api -X POST /unifiedpolicy/api/v1/policies \
-      -H "Content-Type: application/json" \
-      -d "${body}" >/dev/null
+    gi_jf_request_json POST /unifiedpolicy/api/v1/policies "${body}" >/dev/null
     gi_log "Created policy ${policy_name}"
   fi
 }

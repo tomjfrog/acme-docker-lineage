@@ -37,10 +37,6 @@ IMAGE_NAME="$(jq -r '.image_name' <<<"${APP_JSON}")"
 BUILD_NAME="$(jq -r '.build_name' <<<"${APP_JSON}")"
 BUILD_INFO_REPO="$(gi_build_info_repo)"
 
-gi_jf_api() {
-  jf api --server-id "${SERVER_ID}" "$@"
-}
-
 wait_for_predicate() {
   local subject_path="$1" predicate_fragment="$2"
   local attempt=0 max="${EVIDENCE_WAIT_ATTEMPTS:-36}"

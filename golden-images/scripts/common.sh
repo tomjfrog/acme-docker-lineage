@@ -71,3 +71,24 @@ gi_repo() {
 gi_build_info_repo() {
   printf '%s-build-info\n' "$(gi_project_key)"
 }
+
+# JFrog REST via `jf api` (lab convention: options first, path last, body via --input).
+gi_jf_api() {
+  local server_id="${SERVER_ID:-tomjpd2}"
+  command -v jf >/dev/null 2>&1 || gi_die "jf (JFrog CLI) is required"
+  if ! jf api --help >/dev/null 2>&1; then
+    gi_die "jf api is required (JFrog CLI >= 2.120; see setup-jfrog-cli in workflows)"
+  fi
+  jf api --server-id "${server_id}" "$@"
+}
+
+gi_jf_request_json() {
+  local method="$1" path="$2" body="$3"
+  local tmp
+  tmp="$(mktemp)"
+  printf '%s' "${body}" > "${tmp}"
+  gi_jf_api -X "${method}" -H "Content-Type: application/json" --input "${tmp}" "${path}"
+  local rc=$?
+  rm -f "${tmp}"
+  return "${rc}"
+}
