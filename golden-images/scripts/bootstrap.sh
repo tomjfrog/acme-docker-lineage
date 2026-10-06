@@ -65,7 +65,12 @@ ensure_project() {
       },
       storage_quota_bytes: -1
     }')"
-  gi_jf_request_json POST /access/api/v1/projects "${body}"
+  if gi_jf_request_json_try POST /access/api/v1/projects "${body}" >/dev/null; then
+    return 0
+  fi
+  gi_jf_resource_exists "/access/api/v1/projects/${PROJECT_KEY}" \
+    || gi_die "failed to create project ${PROJECT_KEY}"
+  gi_log "Project ${PROJECT_KEY} exists (create conflict)"
 }
 
 ensure_docker_repo() {
@@ -106,7 +111,12 @@ ensure_docker_repo() {
         environments: [$env]
       }')"
   fi
-  gi_jf_request_json PUT "/artifactory/api/repositories/${key}" "${payload}"
+  if gi_jf_request_json_try PUT "/artifactory/api/repositories/${key}" "${payload}" >/dev/null; then
+    return 0
+  fi
+  gi_jf_resource_exists "/artifactory/api/repositories/${key}" \
+    || gi_die "failed to create repo ${key}"
+  gi_log "Repo ${key} exists (create conflict)"
 }
 
 assign_repo_environments() {
@@ -117,6 +127,17 @@ assign_repo_environments() {
   [[ "${DRY_RUN}" == "1" ]] && return 0
   local cur
   cur="$(gi_jf_api "/artifactory/api/repositories/${key}")"
+  local missing=0 env
+  for env in "$@"; do
+    if ! jq -e --arg e "${env}" '.environments // [] | index($e)' <<<"${cur}" >/dev/null; then
+      missing=1
+      break
+    fi
+  done
+  if [[ "${missing}" -eq 0 ]]; then
+    gi_log "Environments on ${key} already include: $*"
+    return 0
+  fi
   local merged
   merged="$(echo "${cur}" | jq --argjson add "${envs_json}" \
     '.environments = ((.environments // []) + $add | unique)')"
@@ -131,14 +152,21 @@ ensure_lifecycle() {
   if jq -e '.[] | select(. == "PROD")' <<<"${stages_json}" >/dev/null 2>&1; then
     gi_die "catalog lifecycle.promote_stages must not include PROD (release stage; use version-release)"
   fi
-  gi_jf_request_json PATCH "/access/api/v2/lifecycle/?project_key=${PROJECT_KEY}" \
-    "$(jq -n --arg pk "${PROJECT_KEY}" --argjson stages "${stages_json}" \
-      '{project_key: $pk, promote_stages: $stages}')"
+  local cur current_stages body
+  cur="$(gi_jf_api "/access/api/v2/lifecycle/?project_key=${PROJECT_KEY}" 2>/dev/null || echo '{}')"
+  current_stages="$(jq -c '.promote_stages // []' <<<"${cur}")"
+  if gi_json_equal "${current_stages}" "${stages_json}"; then
+    gi_log "Lifecycle promote_stages already: $(jq -r '.lifecycle.promote_stages | join(" → ")' <<<"${GI_CATALOG_JSON}")"
+    return 0
+  fi
+  body="$(jq -n --arg pk "${PROJECT_KEY}" --argjson stages "${stages_json}" \
+    '{project_key: $pk, promote_stages: $stages}')"
+  gi_jf_request_json PATCH "/access/api/v2/lifecycle/?project_key=${PROJECT_KEY}" "${body}" >/dev/null
   gi_log "Lifecycle promote_stages: $(jq -r '.lifecycle.promote_stages | join(" → ")' <<<"${GI_CATALOG_JSON}") (PROD = release stage / Trusted Release)"
 }
 
 app_exists() {
-  gi_jf_api "/apptrust/api/v1/applications/${APP_KEY}" >/dev/null 2>&1
+  gi_jf_resource_exists "/apptrust/api/v1/applications/${APP_KEY}"
 }
 
 ensure_app() {
@@ -168,7 +196,12 @@ index_xray_repo() {
   local repo="$1"
   [[ "${DRY_RUN}" == "1" ]] && return 0
   local cur payload
-  if ! cur="$(gi_jf_api "/xray/api/v1/repos_config/${repo}" 2>/dev/null)"; then
+  if cur="$(gi_jf_api "/xray/api/v1/repos_config/${repo}" 2>/dev/null)"; then
+    if jq -e '.repo_config.retention_in_days == 90' <<<"${cur}" >/dev/null; then
+      gi_log "Xray repo ${repo} already indexed"
+      return 0
+    fi
+  else
     cur="$(jq -n --arg r "${repo}" '{repo_name: $r, repo_config: {}}')"
   fi
   payload="$(echo "${cur}" | jq '.repo_config.retention_in_days = 90')"
@@ -180,8 +213,12 @@ index_build() {
   [[ "${DRY_RUN}" == "1" ]] && return 0
   local cur new
   cur="$(gi_jf_api "/xray/api/v1/binMgr/default/builds?projectKey=${PROJECT_KEY}")"
+  if jq -e --arg b "${BUILD_NAME}" '.indexed_builds // [] | index($b)' <<<"${cur}" >/dev/null; then
+    gi_log "Build ${BUILD_NAME} already indexed for project ${PROJECT_KEY}"
+    return 0
+  fi
   new="$(echo "${cur}" | jq --arg b "${BUILD_NAME}" \
-    'if (.indexed_builds // []) | index($b) then . else .indexed_builds = ((.indexed_builds // []) + [$b]) end')"
+    '.indexed_builds = ((.indexed_builds // []) + [$b])')"
   gi_jf_request_json PUT "/xray/api/v1/binMgr/default/builds?projectKey=${PROJECT_KEY}" "${new}" >/dev/null
   gi_log "Indexed build ${BUILD_NAME} for project ${PROJECT_KEY}"
 }
@@ -202,12 +239,18 @@ gi_xray_watch_payload() {
 
 ensure_xray_watch() {
   local watch_name="$1" body="$2"
-  if gi_jf_api "/xray/api/v2/watches/${watch_name}?projectKey=${PROJECT_KEY}" >/dev/null 2>&1; then
+  local watch_path="/xray/api/v2/watches/${watch_name}?projectKey=${PROJECT_KEY}"
+  if gi_jf_resource_exists "${watch_path}"; then
     gi_log "Xray watch ${watch_name} exists"
     return 0
   fi
   gi_log "Creating Xray watch ${watch_name}"
-  gi_jf_request_json POST "/xray/api/v2/watches?projectKey=${PROJECT_KEY}" "${body}" >/dev/null
+  if gi_jf_request_json_try POST "/xray/api/v2/watches?projectKey=${PROJECT_KEY}" "${body}" >/dev/null; then
+    return 0
+  fi
+  gi_jf_resource_exists "${watch_path}" \
+    || gi_die "failed to create Xray watch ${watch_name}"
+  gi_log "Xray watch ${watch_name} exists (create conflict)"
 }
 
 ensure_xray_policy_and_watches() {
@@ -216,25 +259,31 @@ ensure_xray_policy_and_watches() {
   pol_name="$(jq -r '.provisioned_resources.xray.policies[0].name' <<<"${GI_INVENTORY_JSON}")"
   [[ -n "${pol_name}" && "${pol_name}" != "null" ]] || gi_die "inventory xray policy name missing"
 
-  if ! gi_jf_api "/xray/api/v2/policies/${pol_name}?projectKey=${PROJECT_KEY}" >/dev/null 2>&1; then
-    gi_log "Creating Xray policy ${pol_name}"
-    gi_jf_request_json POST "/xray/api/v2/policies?projectKey=${PROJECT_KEY}" \
-      "$(jq -n --arg name "${pol_name}" '{
-        name: $name,
-        description: "Fail builds with Critical CVEs (Golden Image CI)",
-        type: "security",
-        rules: [{
-          name: "critical-cve",
-          priority: 1,
-          criteria: { min_severity: "Critical" },
-          actions: {
-            fail_build: true,
-            block_download: { active: false, unscanned: false }
-          }
-        }]
-      }')" >/dev/null
-  else
+  local pol_path="/xray/api/v2/policies/${pol_name}?projectKey=${PROJECT_KEY}"
+  local pol_body
+  pol_body="$(jq -n --arg name "${pol_name}" '{
+    name: $name,
+    description: "Fail builds with Critical CVEs (Golden Image CI)",
+    type: "security",
+    rules: [{
+      name: "critical-cve",
+      priority: 1,
+      criteria: { min_severity: "Critical" },
+      actions: {
+        fail_build: true,
+        block_download: { active: false, unscanned: false }
+      }
+    }]
+  }')"
+  if gi_jf_resource_exists "${pol_path}"; then
     gi_log "Xray policy ${pol_name} exists"
+  else
+    gi_log "Creating Xray policy ${pol_name}"
+    if ! gi_jf_request_json_try POST "/xray/api/v2/policies?projectKey=${PROJECT_KEY}" "${pol_body}" >/dev/null; then
+      gi_jf_resource_exists "${pol_path}" \
+        || gi_die "failed to create Xray policy ${pol_name}"
+      gi_log "Xray policy ${pol_name} exists (create conflict)"
+    fi
   fi
 
   local watch_count i watch_name desc rtype body resources_json
@@ -298,11 +347,18 @@ ensure_evidence_rule() {
       parameters: [{name: "predicateType", value: $pred}]
     }')"
   if [[ -n "${rule_id}" && "${rule_id}" != "null" ]]; then
-    gi_jf_request_json PUT "/unifiedpolicy/api/v1/rules/${rule_id}" "${body}" >/dev/null
-    gi_log "Updated rule ${rule_name}"
+    gi_log "Unified Policy rule ${rule_name} exists (${rule_id})"
   else
-    rule_id="$(gi_jf_request_json POST /unifiedpolicy/api/v1/rules "${body}" | jq -r '.id')"
-    gi_log "Created rule ${rule_name} (${rule_id})"
+    if out="$(gi_jf_request_json_try POST /unifiedpolicy/api/v1/rules "${body}")"; then
+      rule_id="$(jq -r '.id' <<<"${out}")"
+      gi_log "Created rule ${rule_name} (${rule_id})"
+    else
+      rules="$(gi_jf_api /unifiedpolicy/api/v1/rules)"
+      rule_id="$(echo "${rules}" | jq -r --arg n "${rule_name}" '(.items // .)[] | select(.name==$n) | .id' | head -1)"
+      [[ -n "${rule_id}" && "${rule_id}" != "null" ]] \
+        || gi_die "failed to create Unified Policy rule ${rule_name}"
+      gi_log "Unified Policy rule ${rule_name} exists (${rule_id})"
+    fi
   fi
   printf '%s\n' "${rule_id}"
 }
@@ -328,12 +384,18 @@ ensure_release_policy() {
       scope: {type: "project", project_keys: [$proj]}
     }')"
   if [[ -n "${pol_id}" && "${pol_id}" != "null" ]]; then
-    gi_jf_request_json PUT "/unifiedpolicy/api/v1/policies/${pol_id}" "${body}" >/dev/null
-    gi_log "Updated policy ${policy_name}"
-  else
-    gi_jf_request_json POST /unifiedpolicy/api/v1/policies "${body}" >/dev/null
-    gi_log "Created policy ${policy_name}"
+    gi_log "Unified Policy release policy ${policy_name} exists"
+    return 0
   fi
+  if gi_jf_request_json_try POST /unifiedpolicy/api/v1/policies "${body}" >/dev/null; then
+    gi_log "Created policy ${policy_name}"
+    return 0
+  fi
+  pols="$(gi_jf_api "/unifiedpolicy/api/v1/policies?projectKey=${PROJECT_KEY}")"
+  pol_id="$(echo "${pols}" | jq -r --arg n "${policy_name}" '(.items // .)[] | select(.name==$n) | .id' | head -1)"
+  [[ -n "${pol_id}" && "${pol_id}" != "null" ]] \
+    || gi_die "failed to create release policy ${policy_name}"
+  gi_log "Unified Policy release policy ${policy_name} exists"
 }
 
 ensure_apptrust_release_policies() {

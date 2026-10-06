@@ -90,7 +90,13 @@ gi_jf_api() {
   jf api --server-id "${server_id}" "$@"
 }
 
-gi_jf_request_json() {
+gi_jf_resource_exists() {
+  local path="$1"
+  gi_jf_api "${path}" >/dev/null 2>&1
+}
+
+# Like gi_jf_request_json but returns non-zero without dying (for create + conflict handling).
+gi_jf_request_json_try() {
   local method="$1" path="$2" body="$3"
   local tmp err out rc
   tmp="$(mktemp)"
@@ -100,10 +106,20 @@ gi_jf_request_json() {
   out="$(gi_jf_api -X "${method}" -H "Content-Type: application/json" --input "${tmp}" "${path}" 2>"${err}")"
   rc=$?
   set -e
-  rm -f "${tmp}"
-  if [[ "${rc}" -ne 0 ]]; then
-    gi_die "jf api ${method} ${path} failed (exit ${rc}): $(tr -d '\n' <"${err}") ${out}"
+  rm -f "${tmp}" "${err}"
+  [[ "${rc}" -eq 0 ]] && printf '%s' "${out}"
+  return "${rc}"
+}
+
+gi_jf_request_json() {
+  local method="$1" path="$2" body="$3" out
+  if ! out="$(gi_jf_request_json_try "${method}" "${path}" "${body}")"; then
+    gi_die "jf api ${method} ${path} failed"
   fi
-  rm -f "${err}"
   printf '%s' "${out}"
+}
+
+gi_json_equal() {
+  local a="$1" b="$2"
+  [[ "$(jq -cS . <<<"${a}")" == "$(jq -cS . <<<"${b}")" ]]
 }

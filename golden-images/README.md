@@ -40,7 +40,7 @@ Creates or reconciles:
 - Xray Critical **fail_build** policy + watches `golden-images-dev-build-watch` (build-info) and `golden-images-dev-repo-watch` (DEV docker repo) — see inventory
 - PROD Release policies for Golden certification, SLSA provenance, CycloneDX SBOM v1.6 (tenant rule templates discovered at bootstrap)
 
-Re-run bootstrap to verify idempotency; incompatible drift should fail loudly.
+Re-run bootstrap to verify idempotency: each step checks whether the resource already exists (GET/list) and **skips** create/update when nothing is missing. Incompatible drift (e.g. repo owned by another project) still fails loudly.
 
 ## Release a Golden Alpine version
 

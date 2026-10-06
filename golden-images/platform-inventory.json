@@ -147,6 +147,7 @@
       "Xray repos_config and binMgr build indexing",
       "Evidence predicate rules (template 1007)"
     ],
-    "bootstrap_rationale": "GitHub Actions bootstrap uses jf api for idempotent REST and jf apptrust for applications so a single OIDC job can reconcile drift; MCP is documented here for ad-hoc or agent-driven provisioning."
+    "bootstrap_rationale": "GitHub Actions bootstrap uses jf api for idempotent REST and jf apptrust for applications so a single OIDC job can reconcile drift; MCP is documented here for ad-hoc or agent-driven provisioning.",
+    "idempotency": "bootstrap.sh GETs or lists each resource before create; skips steps when the resource already exists; treats HTTP 409 on create as success after re-check."
   }
 }
