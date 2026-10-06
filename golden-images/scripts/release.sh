@@ -56,10 +56,32 @@ wait_for_predicate() {
 verify_build_info_digest() {
   local info
   info="$(gi_jf_api "/artifactory/api/build/${BUILD_NAME}/${BUILD_NUMBER}?project=${PROJECT_KEY}")"
-  local found
-  found="$(echo "${info}" | jq -r '.. | strings | select(startswith("sha256:"))' \
-    | grep -F "${INDEX_DIGEST}" | head -1 || true)"
-  [[ -n "${found}" ]] || gi_die "Build Info ${BUILD_NAME}/${BUILD_NUMBER} does not reference ${INDEX_DIGEST}"
+  if gi_build_info_references_digest "${info}" "${INDEX_DIGEST}"; then
+    gi_log "Build Info ${BUILD_NAME}/${BUILD_NUMBER} references index ${INDEX_DIGEST}"
+    return 0
+  fi
+
+  # build-docker-create often records per-arch manifest digests, not the OCI index digest.
+  local tag_ref="${REGISTRY_HOST}/${DEV_REPO}/${IMAGE_NAME}:${APP_VERSION}"
+  local resolved_index platform_digest matched
+  if ! resolved_index="$(docker buildx imagetools inspect "${tag_ref}" --format '{{json .Manifest}}' 2>/dev/null \
+    | jq -r '.digest // empty')"; then
+    gi_die "Build Info ${BUILD_NAME}/${BUILD_NUMBER} does not reference ${INDEX_DIGEST} (and could not inspect ${tag_ref})"
+  fi
+  [[ "${resolved_index}" == "${INDEX_DIGEST}" ]] \
+    || gi_die "tag ${tag_ref} index ${resolved_index} != expected ${INDEX_DIGEST}"
+
+  while IFS= read -r platform_digest; do
+    [[ -z "${platform_digest}" ]] && continue
+    if gi_build_info_references_digest "${info}" "${platform_digest}"; then
+      matched="${platform_digest}"
+      break
+    fi
+  done < <(gi_multiarch_manifest_digests_for_tag "${tag_ref}" || true)
+
+  [[ -n "${matched}" ]] \
+    || gi_die "Build Info ${BUILD_NAME}/${BUILD_NUMBER} does not reference index ${INDEX_DIGEST} or any platform manifest for ${tag_ref}"
+  gi_log "Build Info references platform manifest ${matched} (release identity ${INDEX_DIGEST})"
 }
 
 create_or_verify_app_version() {

@@ -80,6 +80,45 @@ gi_build_info_repo() {
   printf '%s-build-info\n' "$(gi_project_key)"
 }
 
+# All sha256:… strings embedded in an Artifactory build-info JSON document.
+gi_build_info_sha256_strings() {
+  local info_json="$1"
+  jq -r '.. | strings | select(startswith("sha256:"))' <<<"${info_json}"
+}
+
+# True when build-info JSON mentions a digest (index or platform manifest).
+gi_build_info_references_digest() {
+  local info_json="$1" digest="$2"
+  gi_build_info_sha256_strings "${info_json}" | grep -Fqx "${digest}"
+}
+
+gi_build_info_references_any_digest() {
+  local info_json="$1" digest
+  shift
+  for digest in "$@"; do
+    if gi_build_info_references_digest "${info_json}" "${digest}"; then
+      printf '%s\n' "${digest}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Index + linux platform image manifest digests for a multi-arch tag (excludes attestations).
+gi_multiarch_manifest_digests_for_tag() {
+  local tag_ref="$1"
+  local manifest_json
+  manifest_json="$(docker buildx imagetools inspect "${tag_ref}" --format '{{json .Manifest}}' 2>/dev/null)" \
+    || return 1
+  jq -r '
+    .digest,
+    (.manifests[]?
+      | select((.annotations["vnd.docker.reference.type"] // "") != "attestation-manifest")
+      | select(.platform.os != "unknown")
+      | .digest)
+  ' <<<"${manifest_json}" | awk 'NF && !seen[$0]++'
+}
+
 # JFrog REST via `jf api` (lab convention: options first, path last, body via --input).
 gi_jf_api() {
   local server_id="${SERVER_ID:-tomjpd2}"
