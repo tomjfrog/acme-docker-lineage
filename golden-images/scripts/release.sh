@@ -89,7 +89,6 @@ create_or_verify_app_version() {
   gi_log "Creating AppTrust version ${APP_KEY}@${APP_VERSION} from Build Info only"
   jf apptrust version-create "${APP_KEY}" "${APP_VERSION}" \
     --sync=true \
-    --skip-unassigned=true \
     --source-type-builds "name=${BUILD_NAME}, id=${BUILD_NUMBER}, repo-key=${BUILD_INFO_REPO}" \
     --server-id "${SERVER_ID}"
 }
