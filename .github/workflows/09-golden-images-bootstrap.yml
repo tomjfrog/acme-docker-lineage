@@ -6,12 +6,16 @@ on:
       application_key:
         description: Application key from golden-images/catalog.json
         required: false
+        type: string
         default: golden-alpine
       dry_run:
         description: Print actions only (no mutations)
         required: false
-        type: boolean
-        default: false
+        type: choice
+        options:
+          - "false"
+          - "true"
+        default: "false"
 
 permissions:
   id-token: write
@@ -24,7 +28,7 @@ jobs:
       JF_URL: ${{ vars.JF_URL }}
       JF_DOCKER_REGISTRY: ${{ vars.JF_DOCKER_REGISTRY }}
       SERVER_ID: tomjpd2
-      DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+      DRY_RUN: ${{ inputs.dry_run == 'true' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -47,6 +51,12 @@ jobs:
         with:
           version: 2.120.0
           custom-server-id: ${{ env.SERVER_ID }}
+
+      - name: Use configured JFrog server
+        run: |
+          set -euo pipefail
+          jf c use "${SERVER_ID}" 2>/dev/null || jf c use setup-jfrog-cli-server
+          jf c show
 
       - name: Validate catalog
         run: ./golden-images/scripts/validate-config.sh "${{ inputs.application_key }}"

@@ -44,8 +44,9 @@ gi_preflight() {
   jf apptrust --help >/dev/null
   gi_jf_api /access/api/v1/projects >/dev/null
   gi_jf_api /xray/api/v2/policies?projectKey="${PROJECT_KEY}" >/dev/null 2>&1 || true
-  gi_jf_api /unifiedpolicy/api/v1/rule-templates >/dev/null 2>&1 \
-    || gi_die "Unified Policy rule-templates API unavailable"
+  # rule-templates is not exposed on all tenants; rules API is what the lab uses (template 1007).
+  gi_jf_api /unifiedpolicy/api/v1/rules >/dev/null 2>&1 \
+    || gi_die "Unified Policy rules API unavailable (AppTrust lifecycle / evidence gates)"
   gi_jf_api /evidence/api/v1/config/categories/ >/dev/null 2>&1 \
     || gi_die "Evidence categories API unavailable"
 }
@@ -227,12 +228,16 @@ ensure_xray_policy_watch() {
 }
 
 find_rule_template_id() {
-  local hint="$1"
-  gi_jf_api /unifiedpolicy/api/v1/rule-templates \
-    | jq -r --arg h "${hint}" '
-      (.items // .)[]
-      | select((.description // "") | test($h; "i") or (.name // "") | test($h; "i"))
-      | .id' | head -1
+  # Predicate-type evidence rules: template 1007 (not 1003). See jfrog-apptrust-gates skill.
+  # rule-templates listing is optional; many SaaS tenants only expose /rules.
+  local from_api=""
+  from_api="$(gi_jf_api /unifiedpolicy/api/v1/rule-templates 2>/dev/null \
+    | jq -r '(.items // .)[] | select(.id == "1007" or .id == 1007) | .id' | head -1 || true)"
+  if [[ -n "${from_api}" && "${from_api}" != "null" ]]; then
+    printf '%s\n' "${from_api}"
+  else
+    printf '%s\n' "1007"
+  fi
 }
 
 ensure_evidence_rule() {
