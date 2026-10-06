@@ -248,9 +248,11 @@ ensure_xray_watch() {
   if gi_jf_request_json_try POST "/xray/api/v2/watches?projectKey=${PROJECT_KEY}" "${body}" >/dev/null; then
     return 0
   fi
-  gi_jf_resource_exists "${watch_path}" \
-    || gi_die "failed to create Xray watch ${watch_name}"
-  gi_log "Xray watch ${watch_name} exists (create conflict)"
+  if gi_jf_resource_exists "${watch_path}"; then
+    gi_log "Xray watch ${watch_name} exists (create conflict)"
+    return 0
+  fi
+  gi_die "failed to create Xray watch ${watch_name}: ${GI_JF_LAST_API_ERROR:-unknown error}"
 }
 
 ensure_xray_policy_and_watches() {
@@ -301,7 +303,14 @@ ensure_xray_policy_and_watches() {
       repository)
         resources_json="$(jq -n \
           --arg repo "$(jq -r --argjson i "${i}" '.provisioned_resources.xray.watches[$i].repository' <<<"${GI_INVENTORY_JSON}")" \
-          '[{ type: "repository", name: $repo }]')"
+          --arg repo_type "$(jq -r --argjson i "${i}" '.provisioned_resources.xray.watches[$i].repo_type // "local"' <<<"${GI_INVENTORY_JSON}")" \
+          --arg bin_mgr "$(jq -r --argjson i "${i}" '.provisioned_resources.xray.watches[$i].bin_mgr_id // "default"' <<<"${GI_INVENTORY_JSON}")" \
+          '[{
+            type: "repository",
+            name: $repo,
+            repo_type: $repo_type,
+            bin_mgr_id: $bin_mgr
+          }]')"
         ;;
       *)
         gi_die "unsupported xray watch resource_type in inventory: ${rtype}"

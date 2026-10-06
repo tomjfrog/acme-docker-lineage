@@ -106,6 +106,13 @@ gi_jf_request_json_try() {
   out="$(gi_jf_api -X "${method}" -H "Content-Type: application/json" --input "${tmp}" "${path}" 2>"${err}")"
   rc=$?
   set -e
+  if [[ "${rc}" -ne 0 ]]; then
+    GI_JF_LAST_API_ERROR="$(tr -d '\n' <"${err}") ${out}"
+    export GI_JF_LAST_API_ERROR
+  else
+    GI_JF_LAST_API_ERROR=""
+    export GI_JF_LAST_API_ERROR
+  fi
   rm -f "${tmp}" "${err}"
   [[ "${rc}" -eq 0 ]] && printf '%s' "${out}"
   return "${rc}"

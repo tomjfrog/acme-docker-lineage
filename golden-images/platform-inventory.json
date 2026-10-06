@@ -77,6 +77,8 @@
           "description": "DEV docker local repo artifact scanning",
           "resource_type": "repository",
           "repository": "golden-images-dev-docker-local",
+          "repo_type": "local",
+          "bin_mgr_id": "default",
           "policies": ["golden-images-critical-cve-fail-build"],
           "channel": "jf_api",
           "mcp_alternative": null
