@@ -373,6 +373,7 @@ ensure_evidence_rule() {
       gi_log "Unified Policy rule ${rule_name} exists (${rule_id})"
     fi
   fi
+  rule_id="$(printf '%s' "${rule_id}" | tr -d '[:space:]')"
   [[ -n "${rule_id}" && "${rule_id}" != "null" ]] \
     || gi_die "missing rule id for ${rule_name}"
   printf '%s\n' "${rule_id}"
@@ -381,8 +382,10 @@ ensure_evidence_rule() {
 ensure_release_policy() {
   local policy_name="$1" rule_id="$2"
   [[ "${DRY_RUN}" == "1" ]] && return 0
+  rule_id="$(printf '%s' "${rule_id}" | tr -d '[:space:]')"
   [[ -n "${rule_id}" && "${rule_id}" != "null" ]] \
     || gi_die "release policy ${policy_name} requires a rule id"
+  gi_log "Release policy ${policy_name} → rule ${rule_id}"
   local pols pol_id
   pols="$(gi_jf_api "/unifiedpolicy/api/v1/policies?projectKey=${PROJECT_KEY}")"
   pol_id="$(gi_up_entity_id_by_name "${pols}" "${policy_name}")"
@@ -404,7 +407,8 @@ ensure_release_policy() {
     gi_log "Unified Policy release policy ${policy_name} exists"
     return 0
   fi
-  if gi_jf_request_json_try POST /unifiedpolicy/api/v1/policies "${body}" >/dev/null; then
+  if gi_jf_request_json_retry POST \
+      "/unifiedpolicy/api/v1/policies?projectKey=${PROJECT_KEY}" "${body}" 5 >/dev/null; then
     gi_log "Created policy ${policy_name}"
     return 0
   fi

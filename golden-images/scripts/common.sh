@@ -87,7 +87,11 @@ gi_jf_api() {
   if ! jf api --help >/dev/null 2>&1; then
     gi_die "jf api is required (JFrog CLI >= 2.120; see setup-jfrog-cli in workflows)"
   fi
-  jf api --server-id "${server_id}" "$@"
+  local timeout_args=()
+  if [[ -n "${GI_JF_HTTP_TIMEOUT:-}" ]]; then
+    timeout_args=(--timeout "${GI_JF_HTTP_TIMEOUT}")
+  fi
+  jf api --server-id "${server_id}" "${timeout_args[@]}" "$@"
 }
 
 gi_jf_resource_exists() {
@@ -116,6 +120,24 @@ gi_jf_request_json_try() {
   rm -f "${tmp}" "${err}"
   [[ "${rc}" -eq 0 ]] && printf '%s' "${out}"
   return "${rc}"
+}
+
+# Transient Unified Policy 500s: retry with longer HTTP timeout (jf default can be 0).
+gi_jf_request_json_retry() {
+  local method="$1" path="$2" body="$3" attempts="${4:-5}"
+  local n=1 out
+  while [[ "${n}" -le "${attempts}" ]]; do
+    if out="$(GI_JF_HTTP_TIMEOUT="${GI_JF_HTTP_TIMEOUT:-120}" gi_jf_request_json_try "${method}" "${path}" "${body}")"; then
+      printf '%s' "${out}"
+      return 0
+    fi
+    if [[ "${n}" -lt "${attempts}" ]]; then
+      gi_log "jf api ${method} ${path} failed (attempt ${n}/${attempts}), retrying…"
+      sleep 3
+    fi
+    n=$((n + 1))
+  done
+  return 1
 }
 
 gi_jf_request_json() {
