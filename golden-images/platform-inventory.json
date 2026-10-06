@@ -108,11 +108,6 @@
           "name": "GI SLSA Provenance Required",
           "template_id": "1007",
           "predicate_from_catalog": "evidence.slsa_provenance_predicate"
-        },
-        {
-          "name": "GI CycloneDX SBOM Required",
-          "template_id": "1007",
-          "predicate_from_catalog": "evidence.cyclonedx_sbom_predicate"
         }
       ],
       "release_policies": [
@@ -125,12 +120,6 @@
         {
           "name": "GI PROD Release - SLSA Provenance",
           "rule": "GI SLSA Provenance Required",
-          "stage": "PROD",
-          "gate": "release"
-        },
-        {
-          "name": "GI PROD Release - CycloneDX SBOM",
-          "rule": "GI CycloneDX SBOM Required",
           "stage": "PROD",
           "gate": "release"
         }

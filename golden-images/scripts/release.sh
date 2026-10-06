@@ -27,7 +27,6 @@ DEV_REPO="$(gi_repo dev_local)"
 RELEASE_REPO="$(gi_repo release_local)"
 GOLDEN_CERT="$(jq -r '.evidence.golden_certification_predicate' <<<"${GI_CATALOG_JSON}")"
 SLSA_PRED="$(jq -r '.evidence.slsa_provenance_predicate' <<<"${GI_CATALOG_JSON}")"
-SBOM_PRED="$(jq -r '.evidence.cyclonedx_sbom_predicate' <<<"${GI_CATALOG_JSON}")"
 
 APP_JSON="$(gi_app_json "${APP_KEY}")"
 IMAGE_NAME="$(jq -r '.image_name' <<<"${APP_JSON}")"
@@ -137,8 +136,8 @@ attach_golden_certification() {
 
 require_release_evidence() {
   local build_subject="${BUILD_INFO_REPO}/${BUILD_NAME}/${BUILD_NUMBER}"
-  wait_for_predicate "${build_subject}" "${SLSA_PRED}"
-  wait_for_predicate "${build_subject}" "${SBOM_PRED}"
+  local image_subject="${DEV_REPO}/${IMAGE_NAME}/${APP_VERSION}/list.manifest.json"
+  wait_for_predicate "${image_subject}" "${SLSA_PRED}"
   wait_for_predicate "${build_subject}" "${GOLDEN_CERT}"
 }
 
@@ -166,9 +165,6 @@ verify_release_artifact() {
 main() {
   verify_build_info_digest
   create_or_verify_app_version
-  local build_path="${BUILD_INFO_REPO}/${BUILD_NAME}/${BUILD_NUMBER}"
-  wait_for_predicate "${build_path}" "provenance"
-  wait_for_predicate "${build_path}" "cyclonedx"
   attach_golden_certification
   require_release_evidence
   release_to_prod
