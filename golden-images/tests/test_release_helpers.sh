@@ -18,15 +18,19 @@ gi_digest_equal() {
 assert_ok "digest match" gi_digest_equal sha256:abc sha256:abc
 assert_fail "digest mismatch" gi_digest_equal sha256:abc sha256:def
 
-INDEX='sha256:aaecbdceedba51d9c28916dd87313979761e26f20b43828f5d41a785ce80572b'
-AMD64='sha256:d9b4a2a3a0321f8a5c261f7429c830167cd024bf63fb17cf447eb9c238d07676'
-BUILD_INFO_FIXTURE="$(jq -n --arg amd "${AMD64}" '{
-  buildInfo: { modules: [{ artifacts: [{ sha256: $amd }] }] }
+INDEX='sha256:0b737e9d1849f9ecf580361e7daf5f55e6e43c51aad0fcf029dc86eb10605d26'
+AMD64='sha256:0b7d90ffa8bcdf49c0ec4ece70a6813e3d7d26299d3d8cc9ca4730b46e13982b'
+BUILD_INFO_INDEX_FIXTURE="$(jq -n --arg hex "0b737e9d1849f9ecf580361e7daf5f55e6e43c51aad0fcf029dc86eb10605d26" '{
+  buildInfo: { modules: [{ id: "golden-alpine:v1.0.4", artifacts: [{ name: "list.manifest.json", sha256: $hex }] }] }
+}')"
+BUILD_INFO_PLATFORM_FIXTURE="$(jq -n --arg hex "0b7d90ffa8bcdf49c0ec4ece70a6813e3d7d26299d3d8cc9ca4730b46e13982b" '{
+  buildInfo: { modules: [{ artifacts: [{ name: "manifest.json", sha256: $hex }] }] }
 }')"
 
-assert_fail "build-info index digest miss (platform-only build-info)" gi_build_info_references_digest "${BUILD_INFO_FIXTURE}" "${INDEX}"
+assert_ok "build-info list.manifest bare hex matches index" gi_build_info_references_digest "${BUILD_INFO_INDEX_FIXTURE}" "${INDEX}"
+assert_fail "build-info index digest miss (platform-only build-info)" gi_build_info_references_digest "${BUILD_INFO_PLATFORM_FIXTURE}" "${INDEX}"
 
-assert_ok "build-info platform digest hit" gi_build_info_references_digest "${BUILD_INFO_FIXTURE}" "${AMD64}"
-assert_ok "build-info any digest (platform)" test "$(gi_build_info_references_any_digest "${BUILD_INFO_FIXTURE}" "${INDEX}" "${AMD64}")" = "${AMD64}"
+assert_ok "build-info platform digest hit (bare hex)" gi_build_info_references_digest "${BUILD_INFO_PLATFORM_FIXTURE}" "${AMD64}"
+assert_ok "build-info any digest (platform)" test "$(gi_build_info_references_any_digest "${BUILD_INFO_PLATFORM_FIXTURE}" "${INDEX}" "${AMD64}")" = "${AMD64}"
 
 test_summary

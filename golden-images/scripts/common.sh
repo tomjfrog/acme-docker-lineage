@@ -80,10 +80,17 @@ gi_build_info_repo() {
   printf '%s-build-info\n' "$(gi_project_key)"
 }
 
-# All sha256:… strings embedded in an Artifactory build-info JSON document.
+# Normalized sha256:… digests from build-info (CLI uses bare hex in artifacts[].sha256).
 gi_build_info_sha256_strings() {
   local info_json="$1"
-  jq -r '.. | strings | select(startswith("sha256:"))' <<<"${info_json}"
+  jq -r '
+    def as_digest:
+      if test("^sha256:[a-f0-9]{64}$") then .
+      elif test("^[a-f0-9]{64}$") then "sha256:\(.)"
+      else (capture("sha256:(?<d>[a-f0-9]{64})")?.d // empty | if . != "" then "sha256:\(.)" else empty end)
+      end;
+    [ .. | strings | as_digest | select(. != null and length > 0) ] | unique[] | select(length > 0)
+  ' <<<"${info_json}"
 }
 
 # True when build-info JSON mentions a digest (index or platform manifest).
