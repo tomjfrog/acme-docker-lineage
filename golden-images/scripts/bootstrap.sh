@@ -21,6 +21,7 @@ DEV_REPO="$(gi_repo dev_local)"
 RELEASE_REPO="$(gi_repo release_local)"
 GOLDEN_CERT="$(jq -r '.evidence.golden_certification_predicate' <<<"${GI_CATALOG_JSON}")"
 SLSA_PRED="$(jq -r '.evidence.slsa_provenance_predicate' <<<"${GI_CATALOG_JSON}")"
+SBOM_PRED="$(jq -r '.evidence.cyclonedx_sbom_predicate' <<<"${GI_CATALOG_JSON}")"
 
 APP_JSON="$(gi_app_json "${APP_KEY}")"
 APP_NAME="$(jq -r '.application_name' <<<"${APP_JSON}")"
@@ -418,24 +419,14 @@ ensure_release_policy() {
   gi_log "Unified Policy release policy ${policy_name} exists"
 }
 
-remove_release_policy_if_exists() {
-  local policy_name="$1"
-  [[ "${DRY_RUN}" == "1" ]] && return 0
-  local pols pol_id
-  pols="$(gi_jf_api "/unifiedpolicy/api/v1/policies?projectKey=${PROJECT_KEY}")"
-  pol_id="$(gi_up_entity_id_by_name "${pols}" "${policy_name}")"
-  [[ -n "${pol_id}" ]] || return 0
-  gi_jf_api -X DELETE "/unifiedpolicy/api/v1/policies/${pol_id}" >/dev/null
-  gi_log "Removed obsolete release policy ${policy_name}"
-}
-
 ensure_apptrust_release_policies() {
-  local r1 r2
-  remove_release_policy_if_exists "GI PROD Release - CycloneDX SBOM"
+  local r1 r2 r3
   r1="$(ensure_evidence_rule "GI Golden Certification Required" "${GOLDEN_CERT}")"
   ensure_release_policy "GI PROD Release - Golden Certification" "${r1}"
   r2="$(ensure_evidence_rule "GI SLSA Provenance Required" "${SLSA_PRED}")"
   ensure_release_policy "GI PROD Release - SLSA Provenance" "${r2}"
+  r3="$(ensure_evidence_rule "GI CycloneDX SBOM Required" "${SBOM_PRED}")"
+  ensure_release_policy "GI PROD Release - CycloneDX SBOM" "${r3}"
   gi_log "Note: add AppTrust Critical CVE rule via UI or tenant-specific template if not present"
 }
 

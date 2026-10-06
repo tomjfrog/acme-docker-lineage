@@ -38,7 +38,7 @@ Creates or reconciles:
 - Lifecycle promote path **`DEV`** only in `promote_stages` (global **`PROD`** is category **release**, not promote — Trusted Release via `version-release` after Release gate)
 - AppTrust application `golden-alpine`
 - Xray Critical **fail_build** policy + watches `golden-images-dev-build-watch` (build-info) and `golden-images-dev-repo-watch` (DEV docker repo) — see inventory
-- PROD Release policies for Golden certification and SLSA provenance; AppVersion/Xray provides the native SBOM
+- PROD Release policies for Golden certification, SLSA provenance, and the native CycloneDX SBOM that Lifecycle/Xray associates with the AppVersion manifest
 
 Re-run bootstrap to verify idempotency: each step checks whether the resource already exists (GET/list) and **skips** create/update when nothing is missing. Incompatible drift (e.g. repo owned by another project) still fails loudly.
 

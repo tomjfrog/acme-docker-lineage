@@ -27,6 +27,7 @@ DEV_REPO="$(gi_repo dev_local)"
 RELEASE_REPO="$(gi_repo release_local)"
 GOLDEN_CERT="$(jq -r '.evidence.golden_certification_predicate' <<<"${GI_CATALOG_JSON}")"
 SLSA_PRED="$(jq -r '.evidence.slsa_provenance_predicate' <<<"${GI_CATALOG_JSON}")"
+SBOM_PRED="$(jq -r '.evidence.cyclonedx_sbom_predicate' <<<"${GI_CATALOG_JSON}")"
 
 APP_JSON="$(gi_app_json "${APP_KEY}")"
 IMAGE_NAME="$(jq -r '.image_name' <<<"${APP_JSON}")"
@@ -124,21 +125,22 @@ attach_golden_certification() {
     }' > "${predicate_file}"
 
   jf evd create \
-    --build-name "${BUILD_NAME}" \
-    --build-number "${BUILD_NUMBER}" \
+    --application-key "${APP_KEY}" \
+    --application-version "${APP_VERSION}" \
     --predicate "${predicate_file}" \
     --predicate-type "${GOLDEN_CERT}" \
     --key "${EVIDENCE_KEY_FILE}" \
     --key-alias "${KEY_ALIAS}" \
-    --project "${PROJECT_KEY}" \
     --server-id "${SERVER_ID}"
 }
 
 require_release_evidence() {
-  local build_subject="${BUILD_INFO_REPO}/${BUILD_NAME}/${BUILD_NUMBER}"
-  local image_subject="${DEV_REPO}/${IMAGE_NAME}/${APP_VERSION}/list.manifest.json"
+  local app_version_root="${PROJECT_KEY}-application-versions/${APP_KEY}/${APP_VERSION}"
+  local app_version_subject="${app_version_root}/release-bundle.json.evd"
+  local image_subject="${app_version_root}/artifacts/docker/${IMAGE_NAME}/${APP_VERSION}/list.manifest.json"
   wait_for_predicate "${image_subject}" "${SLSA_PRED}"
-  wait_for_predicate "${build_subject}" "${GOLDEN_CERT}"
+  wait_for_predicate "${app_version_subject}" "${SBOM_PRED}"
+  wait_for_predicate "${app_version_subject}" "${GOLDEN_CERT}"
 }
 
 release_to_prod() {
