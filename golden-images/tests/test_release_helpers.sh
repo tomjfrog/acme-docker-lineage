@@ -26,11 +26,15 @@ BUILD_INFO_INDEX_FIXTURE="$(jq -n --arg hex "0b737e9d1849f9ecf580361e7daf5f55e6e
 BUILD_INFO_PLATFORM_FIXTURE="$(jq -n --arg hex "0b7d90ffa8bcdf49c0ec4ece70a6813e3d7d26299d3d8cc9ca4730b46e13982b" '{
   buildInfo: { modules: [{ artifacts: [{ name: "manifest.json", sha256: $hex }] }] }
 }')"
+BUILD_INFO_PATH_FIXTURE="$(jq -n --arg path "golden-alpine/sha256:0b7d90ffa8bcdf49c0ec4ece70a6813e3d7d26299d3d8cc9ca4730b46e13982b/manifest.json" '{
+  buildInfo: { modules: [{ artifacts: [{ path: $path }] }] }
+}')"
 
 assert_ok "build-info list.manifest bare hex matches index" gi_build_info_references_digest "${BUILD_INFO_INDEX_FIXTURE}" "${INDEX}"
 assert_fail "build-info index digest miss (platform-only build-info)" gi_build_info_references_digest "${BUILD_INFO_PLATFORM_FIXTURE}" "${INDEX}"
 
 assert_ok "build-info platform digest hit (bare hex)" gi_build_info_references_digest "${BUILD_INFO_PLATFORM_FIXTURE}" "${AMD64}"
+assert_ok "build-info platform digest hit (embedded path)" gi_build_info_references_digest "${BUILD_INFO_PATH_FIXTURE}" "${AMD64}"
 assert_ok "build-info any digest (platform)" test "$(gi_build_info_references_any_digest "${BUILD_INFO_PLATFORM_FIXTURE}" "${INDEX}" "${AMD64}")" = "${AMD64}"
 
 test_summary

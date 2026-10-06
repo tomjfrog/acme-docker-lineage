@@ -87,7 +87,8 @@ gi_build_info_sha256_strings() {
     def as_digest:
       if test("^sha256:[a-f0-9]{64}$") then .
       elif test("^[a-f0-9]{64}$") then "sha256:\(.)"
-      else (capture("sha256:(?<d>[a-f0-9]{64})")?.d // empty | if . != "" then "sha256:\(.)" else empty end)
+      elif test("sha256:[a-f0-9]{64}") then match("sha256:[a-f0-9]{64}").string
+      else empty
       end;
     [ .. | strings | as_digest | select(. != null and length > 0) ] | unique[] | select(length > 0)
   ' <<<"${info_json}"
