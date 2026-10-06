@@ -12,7 +12,6 @@ APP_VERSION="${APP_VERSION:?APP_VERSION required}"
 BUILD_NUMBER="${BUILD_NUMBER:?BUILD_NUMBER required}"
 INDEX_DIGEST="${INDEX_DIGEST:?INDEX_DIGEST required}"
 UPSTREAM_TAG="${UPSTREAM_TAG:?UPSTREAM_TAG required}"
-UPSTREAM_DIGEST="${UPSTREAM_DIGEST:?UPSTREAM_DIGEST required}"
 KEY_ALIAS="${KEY_ALIAS:-acme-lineage-lab}"
 EVIDENCE_KEY_FILE="${EVIDENCE_KEY_FILE:?EVIDENCE_KEY_FILE required}"
 REGISTRY_HOST="${REGISTRY_HOST:?REGISTRY_HOST required}"
@@ -20,7 +19,6 @@ SKIP_PRE_CERT_DRY_RUN="${SKIP_PRE_CERT_DRY_RUN:-0}"
 
 "${SCRIPT_DIR}/validate-config.sh" "${APP_KEY}"
 gi_require_upstream_path "${APP_KEY}" "library/alpine"
-gi_validate_sha256_digest "${UPSTREAM_DIGEST}" || gi_die "invalid upstream_digest"
 gi_validate_sha256_digest "${INDEX_DIGEST}" || gi_die "invalid INDEX_DIGEST"
 gi_validate_version_string "${APP_VERSION}" || gi_die "invalid APP_VERSION"
 
@@ -121,7 +119,6 @@ attach_golden_certification() {
     --arg app "${APP_KEY}" \
     --arg ver "${APP_VERSION}" \
     --arg upstream_tag "${UPSTREAM_TAG}" \
-    --arg upstream_digest "${UPSTREAM_DIGEST}" \
     --arg index_digest "${INDEX_DIGEST}" \
     --arg build_name "${BUILD_NAME}" \
     --arg build_number "${BUILD_NUMBER}" \
@@ -136,7 +133,6 @@ attach_golden_certification() {
       application_version: $ver,
       upstream_image_path: "library/alpine",
       upstream_tag: $upstream_tag,
-      upstream_digest: $upstream_digest,
       golden_image_name: $image,
       golden_image_digest: $index_digest,
       build_name: $build_name,

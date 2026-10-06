@@ -1,4 +1,4 @@
-# Golden Alpine base: digest-pinned upstream + lab dummy CA (customer analog).
+# Golden Alpine base from the trusted upstream tag + lab dummy CA (customer analog).
 ARG BASE_IMAGE=alpine:3.20
 FROM ${BASE_IMAGE}
 

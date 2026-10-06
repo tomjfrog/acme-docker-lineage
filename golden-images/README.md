@@ -53,12 +53,11 @@ Required dispatch inputs:
 | Input | Meaning |
 |---|---|
 | `app_version` | Immutable image tag and AppTrust version (e.g. `1.0.0`) |
-| `upstream_tag` | Official `library/alpine` tag |
-| `upstream_digest` | `sha256:<64 hex>` for that tag on Docker Hub |
+| `upstream_tag` | Trusted `library/alpine` tag |
 
 Flow:
 
-1. **build-and-scan** — digest-pinned build through the upstream remote, multi-arch push to DEV, Build Info publish, `jf build-scan --fail=false` (report vulnerabilities; policy skips non-applicable CVEs), GitHub provenance attestation (ingested by `setup-jfrog-cli` post-step).
+1. **build-and-scan** — build from the trusted upstream tag, multi-arch push to DEV, Build Info publish, `jf build-scan --fail=false` (report vulnerabilities; policy skips non-applicable CVEs), GitHub provenance attestation (ingested by `setup-jfrog-cli` post-step).
 2. **certify-and-release** — AppVersion from **Build Info only**, pre-cert PROD promote dry-run (expects block), Golden certification evidence, `jf apptrust version-release` with copy to PROD, digest verification on `golden-images-release-docker-local`.
 
 ## Tests

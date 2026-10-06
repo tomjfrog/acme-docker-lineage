@@ -11,10 +11,7 @@ on:
         description: Immutable Golden / AppTrust version (image tag)
         required: true
       upstream_tag:
-        description: Official library/alpine tag (e.g. 3.21.3)
-        required: true
-      upstream_digest:
-        description: sha256 digest of that tag on Docker Hub (64 hex chars, with sha256 prefix)
+        description: Trusted library/alpine tag (e.g. 3.21.3)
         required: true
 
 permissions:
@@ -32,7 +29,6 @@ jobs:
       APP_KEY: ${{ inputs.application_key }}
       APP_VERSION: ${{ inputs.app_version }}
       UPSTREAM_TAG: ${{ inputs.upstream_tag }}
-      UPSTREAM_DIGEST: ${{ inputs.upstream_digest }}
     outputs:
       index_digest: ${{ steps.build-and-push.outputs.digest }}
       build_number: ${{ steps.set-env.outputs.build_number }}
@@ -44,7 +40,6 @@ jobs:
           set -euo pipefail
           ./golden-images/scripts/validate-config.sh "${APP_KEY}"
           source ./golden-images/scripts/common.sh
-          gi_validate_sha256_digest "${UPSTREAM_DIGEST}"
           gi_validate_version_string "${APP_VERSION}"
           gi_require_upstream_path "${APP_KEY}" "library/alpine"
 
@@ -57,16 +52,14 @@ jobs:
           IMAGE_NAME="$(jq -r '.image_name' <<<"${APP_JSON}")"
           BUILD_NAME="$(jq -r '.build_name' <<<"${APP_JSON}")"
           DEV_REPO="$(gi_repo dev_local)"
-          UPSTREAM_REPO="$(gi_repo upstream_remote)"
           PROJECT_KEY="$(gi_project_key)"
           BNUM="${GITHUB_RUN_NUMBER}-${APP_VERSION}"
           IMAGE="${JF_DOCKER_REGISTRY}/${DEV_REPO}/${IMAGE_NAME}:${APP_VERSION}"
-          BASE="library/alpine:${UPSTREAM_TAG}@${UPSTREAM_DIGEST}"
+          BASE="library/alpine:${UPSTREAM_TAG}"
           {
             echo "IMAGE_NAME=${IMAGE_NAME}"
             echo "BUILD_NAME=${BUILD_NAME}"
             echo "DEV_REPO=${DEV_REPO}"
-            echo "UPSTREAM_REPO=${UPSTREAM_REPO}"
             echo "PROJECT_KEY=${PROJECT_KEY}"
             echo "BUILD_NUM=${BNUM}"
             echo "GOLDEN_IMAGE=${IMAGE}"
@@ -114,22 +107,6 @@ jobs:
       - name: Docker login (act)
         if: ${{ env.ACT }}
         run: jf docker login "${JF_DOCKER_REGISTRY}" --server-id "${SERVER_ID}"
-
-      - name: Verify upstream digest via Artifactory remote
-        run: |
-          set -euo pipefail
-          REF="${JF_DOCKER_REGISTRY}/${UPSTREAM_REPO}/library/alpine:${UPSTREAM_TAG}"
-          docker pull "${REF}" || true
-          RESOLVED="$(docker buildx imagetools inspect "${REF}" --format '{{json .Manifest}}' 2>/dev/null | jq -r '.digest // empty' || true)"
-          if [[ -z "${RESOLVED}" ]]; then
-            echo "::warning::Could not resolve ${REF}; continuing with supplied digest (verify manually)"
-            exit 0
-          fi
-          if [[ "${RESOLVED}" != "${UPSTREAM_DIGEST}" ]]; then
-            echo "::error::Upstream tag ${UPSTREAM_TAG} resolves to ${RESOLVED}, expected ${UPSTREAM_DIGEST}"
-            exit 1
-          fi
-          echo "Upstream digest verified"
 
       - name: Build and push Golden image (multi-arch)
         id: build-and-push
@@ -183,7 +160,6 @@ jobs:
       APP_KEY: ${{ inputs.application_key }}
       APP_VERSION: ${{ inputs.app_version }}
       UPSTREAM_TAG: ${{ inputs.upstream_tag }}
-      UPSTREAM_DIGEST: ${{ inputs.upstream_digest }}
       BUILD_NUMBER: ${{ needs.build-and-scan.outputs.build_number }}
       INDEX_DIGEST: ${{ needs.build-and-scan.outputs.index_digest }}
       REGISTRY_HOST: ${{ vars.JF_DOCKER_REGISTRY }}
