@@ -9,6 +9,12 @@
   "lifecycle": {
     "promote_stages": ["DEV"]
   },
+  "platform_inventory": "golden-images/platform-inventory.json",
+  "xray": {
+    "policy_name": "golden-images-critical-cve-fail-build",
+    "build_watch": "golden-images-dev-build-watch",
+    "repo_watch": "golden-images-dev-repo-watch"
+  },
   "evidence": {
     "golden_certification_predicate": "https://acme.example/evidence/golden-image-certification/v1",
     "slsa_provenance_predicate": "https://slsa.dev/provenance/v1",

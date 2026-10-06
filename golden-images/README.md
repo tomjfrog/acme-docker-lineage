@@ -13,7 +13,7 @@ This is separate from the lineage lab under [`lab/`](../lab/) and workflows `00`
 
 ## Catalog
 
-[`catalog.json`](catalog.json) defines project keys, repositories, evidence predicate URIs, and applications. Add JDK/Node by extending `applications[]` and a matching `golden-images/<family>/` build context — no script forks.
+[`catalog.json`](catalog.json) defines project keys, repositories, evidence predicate URIs, and applications. [`platform-inventory.json`](platform-inventory.json) lists every platform object bootstrap creates (names, types, and whether to use **JFrog MCP** vs **`jf api` / CLI**). Add JDK/Node by extending `applications[]` and inventory, plus a matching `golden-images/<family>/` build context — no script forks.
 
 Validate:
 
@@ -37,7 +37,7 @@ Creates or reconciles:
 - Project `golden-images` and repos `golden-images-upstream-docker-remote`, `golden-images-dev-docker-local`, `golden-images-release-docker-local`
 - Lifecycle promote path **`DEV`** only in `promote_stages` (global **`PROD`** is category **release**, not promote — Trusted Release via `version-release` after Release gate)
 - AppTrust application `golden-alpine`
-- Xray Critical **fail_build** policy + watch on DEV repo and project build `golden-images-alpine`
+- Xray Critical **fail_build** policy + watches `golden-images-dev-build-watch` (build-info) and `golden-images-dev-repo-watch` (DEV docker repo) — see inventory
 - PROD Release policies for Golden certification, SLSA provenance, CycloneDX SBOM v1.6 (tenant rule templates discovered at bootstrap)
 
 Re-run bootstrap to verify idempotency; incompatible drift should fail loudly.

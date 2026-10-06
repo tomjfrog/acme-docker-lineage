@@ -9,6 +9,12 @@ source "${SCRIPT_DIR}/common.sh"
 APP_KEY="${1:-}"
 
 gi_load_catalog
+gi_load_inventory
+
+inv_project="$(jq -r '.project_key' <<<"${GI_INVENTORY_JSON}")"
+cat_project="$(jq -r '.project_key' <<<"${GI_CATALOG_JSON}")"
+[[ "${inv_project}" == "${cat_project}" ]] \
+  || gi_die "platform-inventory project_key (${inv_project}) != catalog (${cat_project})"
 
 keys="$(jq -r '.applications[].application_key' <<<"${GI_CATALOG_JSON}")"
 if [[ "$(printf '%s\n' ${keys} | sort | uniq -d | wc -l | tr -d ' ')" != "0" ]]; then

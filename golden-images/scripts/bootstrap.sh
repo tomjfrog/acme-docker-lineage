@@ -13,6 +13,7 @@ APP_KEY="${1:-golden-alpine}"
 "${SCRIPT_DIR}/validate-config.sh" "${APP_KEY}"
 
 gi_load_catalog
+gi_load_inventory
 PROJECT_KEY="$(gi_project_key)"
 PROJECT_NAME="$(jq -r '.project_display_name' <<<"${GI_CATALOG_JSON}")"
 UPSTREAM_REPO="$(gi_repo upstream_remote)"
@@ -173,10 +174,35 @@ index_build() {
   gi_log "Indexed build ${BUILD_NAME} for project ${PROJECT_KEY}"
 }
 
-ensure_xray_policy_watch() {
-  local pol_name="golden-images-critical-cve-fail-build"
-  local watch_name="golden-images-dev-watch"
+gi_xray_watch_payload() {
+  local name="$1" description="$2" resources_json="$3" policy_name="$4"
+  jq -n \
+    --arg name "${name}" \
+    --arg desc "${description}" \
+    --arg pol "${policy_name}" \
+    --argjson resources "${resources_json}" \
+    '{
+      general_data: { name: $name, description: $desc, active: true },
+      project_resources: { resources: $resources },
+      assigned_policies: [{ name: $pol, type: "security" }]
+    }'
+}
+
+ensure_xray_watch() {
+  local watch_name="$1" body="$2"
+  if gi_jf_api "/xray/api/v2/watches/${watch_name}?projectKey=${PROJECT_KEY}" >/dev/null 2>&1; then
+    gi_log "Xray watch ${watch_name} exists"
+    return 0
+  fi
+  gi_log "Creating Xray watch ${watch_name}"
+  gi_jf_request_json POST "/xray/api/v2/watches?projectKey=${PROJECT_KEY}" "${body}" >/dev/null
+}
+
+ensure_xray_policy_and_watches() {
   [[ "${DRY_RUN}" == "1" ]] && return 0
+  local pol_name
+  pol_name="$(jq -r '.provisioned_resources.xray.policies[0].name' <<<"${GI_INVENTORY_JSON}")"
+  [[ -n "${pol_name}" && "${pol_name}" != "null" ]] || gi_die "inventory xray policy name missing"
 
   if ! gi_jf_api "/xray/api/v2/policies/${pol_name}?projectKey=${PROJECT_KEY}" >/dev/null 2>&1; then
     gi_log "Creating Xray policy ${pol_name}"
@@ -199,30 +225,30 @@ ensure_xray_policy_watch() {
     gi_log "Xray policy ${pol_name} exists"
   fi
 
-  if ! gi_jf_api "/xray/api/v2/watches/${watch_name}?projectKey=${PROJECT_KEY}" >/dev/null 2>&1; then
-    gi_log "Creating Xray watch ${watch_name}"
-    gi_jf_request_json POST "/xray/api/v2/watches?projectKey=${PROJECT_KEY}" \
-      "$(jq -n \
-        --arg name "${watch_name}" \
-        --arg dev "${DEV_REPO}" \
-        --arg build "${BUILD_NAME}" \
-        --arg build_repo "${BUILD_INFO_REPO}" \
-        --arg pol "${pol_name}" \
-        '{
-          name: $name,
-          description: "Golden DEV docker repo + project build-info",
-          active: true,
-          project_resources: {
-            resources: [
-              { type: "repository", name: $dev },
-              { type: "build", name: $build, build_repo: $build_repo }
-            ]
-          },
-          policies: [{ name: $pol, type: "security" }]
-        }')" >/dev/null
-  else
-    gi_log "Xray watch ${watch_name} exists"
-  fi
+  local watch_count i watch_name desc rtype body resources_json
+  watch_count="$(jq '.provisioned_resources.xray.watches | length' <<<"${GI_INVENTORY_JSON}")"
+  for ((i = 0; i < watch_count; i++)); do
+    watch_name="$(jq -r --argjson i "${i}" '.provisioned_resources.xray.watches[$i].name' <<<"${GI_INVENTORY_JSON}")"
+    desc="$(jq -r --argjson i "${i}" '.provisioned_resources.xray.watches[$i].description' <<<"${GI_INVENTORY_JSON}")"
+    rtype="$(jq -r --argjson i "${i}" '.provisioned_resources.xray.watches[$i].resource_type' <<<"${GI_INVENTORY_JSON}")"
+    case "${rtype}" in
+      all-builds)
+        resources_json="$(jq -n \
+          --arg build_repo "${BUILD_INFO_REPO}" \
+          '[{ type: "all-builds", bin_mgr_id: "default", build_repo: $build_repo }]')"
+        ;;
+      repository)
+        resources_json="$(jq -n \
+          --arg repo "$(jq -r --argjson i "${i}" '.provisioned_resources.xray.watches[$i].repository' <<<"${GI_INVENTORY_JSON}")" \
+          '[{ type: "repository", name: $repo }]')"
+        ;;
+      *)
+        gi_die "unsupported xray watch resource_type in inventory: ${rtype}"
+        ;;
+    esac
+    body="$(gi_xray_watch_payload "${watch_name}" "${desc}" "${resources_json}" "${pol_name}")"
+    ensure_xray_watch "${watch_name}" "${body}"
+  done
 }
 
 find_rule_template_id() {
@@ -322,7 +348,7 @@ main() {
   index_xray_repo "${DEV_REPO}"
   index_xray_repo "${RELEASE_REPO}"
   index_build
-  ensure_xray_policy_watch
+  ensure_xray_policy_and_watches
   ensure_apptrust_release_policies
   gi_log "Bootstrap complete for ${APP_KEY} in project ${PROJECT_KEY}"
 }

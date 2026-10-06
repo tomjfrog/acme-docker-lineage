@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "description": "Static inventory of JFrog platform objects provisioned for Golden Image Management. Workflows and scripts should treat this as the source of truth for names and provisioning channel.",
+  "project_key": "golden-images",
+  "catalog": "golden-images/catalog.json",
+  "bootstrap_script": "golden-images/scripts/bootstrap.sh",
+  "provisioned_resources": {
+    "access": {
+      "project": {
+        "project_key": "golden-images",
+        "display_name": "Golden Image Management",
+        "channel": "jf_api",
+        "mcp_alternative": "access_projects_create"
+      },
+      "lifecycle": {
+        "promote_stages": ["DEV"],
+        "release_stage": "PROD",
+        "channel": "jf_api",
+        "mcp_read": "apptrust_get_lifecycle_overview"
+      }
+    },
+    "artifactory": {
+      "repositories": [
+        {
+          "key": "golden-images-upstream-docker-remote",
+          "rclass": "remote",
+          "packageType": "docker",
+          "environment": null,
+          "channel": "jf_api",
+          "mcp_alternative": "artifactory_repositories_create"
+        },
+        {
+          "key": "golden-images-dev-docker-local",
+          "rclass": "local",
+          "packageType": "docker",
+          "environment": "DEV",
+          "channel": "jf_api",
+          "mcp_alternative": "artifactory_repositories_create"
+        },
+        {
+          "key": "golden-images-release-docker-local",
+          "rclass": "local",
+          "packageType": "docker",
+          "environment": "PROD",
+          "channel": "jf_api",
+          "mcp_alternative": "artifactory_repositories_create"
+        }
+      ],
+      "build_info_repo": "golden-images-build-info"
+    },
+    "xray": {
+      "indexed_repos": [
+        "golden-images-dev-docker-local",
+        "golden-images-release-docker-local"
+      ],
+      "indexed_builds": ["golden-images-alpine"],
+      "policies": [
+        {
+          "name": "golden-images-critical-cve-fail-build",
+          "type": "security",
+          "channel": "jf_api",
+          "mcp_alternative": null
+        }
+      ],
+      "watches": [
+        {
+          "name": "golden-images-dev-build-watch",
+          "description": "Project build-info for golden-images-alpine (CI build-scan fail_build)",
+          "resource_type": "all-builds",
+          "build_repo": "golden-images-build-info",
+          "policies": ["golden-images-critical-cve-fail-build"],
+          "channel": "jf_api",
+          "mcp_alternative": null
+        },
+        {
+          "name": "golden-images-dev-repo-watch",
+          "description": "DEV docker local repo artifact scanning",
+          "resource_type": "repository",
+          "repository": "golden-images-dev-docker-local",
+          "policies": ["golden-images-critical-cve-fail-build"],
+          "channel": "jf_api",
+          "mcp_alternative": null
+        }
+      ]
+    },
+    "apptrust": {
+      "applications": [
+        {
+          "application_key": "golden-alpine",
+          "application_name": "Golden Alpine Base",
+          "build_name": "golden-images-alpine",
+          "channel": "jf_apptrust_cli",
+          "mcp_alternative": "apptrust_create_application"
+        }
+      ],
+      "unified_policy_rules": [
+        {
+          "name": "GI Golden Certification Required",
+          "template_id": "1007",
+          "predicate_from_catalog": "evidence.golden_certification_predicate"
+        },
+        {
+          "name": "GI SLSA Provenance Required",
+          "template_id": "1007",
+          "predicate_from_catalog": "evidence.slsa_provenance_predicate"
+        },
+        {
+          "name": "GI CycloneDX SBOM Required",
+          "template_id": "1007",
+          "predicate_from_catalog": "evidence.cyclonedx_sbom_predicate"
+        }
+      ],
+      "release_policies": [
+        {
+          "name": "GI PROD Release - Golden Certification",
+          "rule": "GI Golden Certification Required",
+          "stage": "PROD",
+          "gate": "release"
+        },
+        {
+          "name": "GI PROD Release - SLSA Provenance",
+          "rule": "GI SLSA Provenance Required",
+          "stage": "PROD",
+          "gate": "release"
+        },
+        {
+          "name": "GI PROD Release - CycloneDX SBOM",
+          "rule": "GI CycloneDX SBOM Required",
+          "stage": "PROD",
+          "gate": "release"
+        }
+      ]
+    }
+  },
+  "mcp_provisioning_notes": {
+    "use_mcp_when": [
+      "access_projects_create / access_projects_get / access_projects_list",
+      "artifactory_repositories_create / artifactory_repositories_get",
+      "apptrust_create_application / apptrust_get_application_summary / apptrust_get_lifecycle_overview"
+    ],
+    "use_jf_cli_or_rest_only": [
+      "Xray policies and watches (no MCP tools)",
+      "Unified Policy rules and lifecycle release policies",
+      "Artifactory repo environment merge (POST full repo JSON)",
+      "Xray repos_config and binMgr build indexing",
+      "Evidence predicate rules (template 1007)"
+    ],
+    "bootstrap_rationale": "GitHub Actions bootstrap uses jf api for idempotent REST and jf apptrust for applications so a single OIDC job can reconcile drift; MCP is documented here for ad-hoc or agent-driven provisioning."
+  }
+}

@@ -5,6 +5,7 @@ set -euo pipefail
 GI_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GI_REPO_ROOT="$(cd "${GI_ROOT}/.." && pwd)"
 GI_CATALOG="${GI_CATALOG:-${GI_ROOT}/catalog.json}"
+GI_INVENTORY="${GI_INVENTORY:-${GI_ROOT}/platform-inventory.json}"
 
 gi_die() { echo "golden-images: $*" >&2; exit 1; }
 gi_log() { printf '==> %s\n' "$*"; }
@@ -18,6 +19,13 @@ gi_load_catalog() {
   [[ -f "${GI_CATALOG}" ]] || gi_die "catalog not found: ${GI_CATALOG}"
   GI_CATALOG_JSON="$(cat "${GI_CATALOG}")"
   export GI_CATALOG_JSON
+}
+
+gi_load_inventory() {
+  gi_require_tools
+  [[ -f "${GI_INVENTORY}" ]] || gi_die "platform inventory not found: ${GI_INVENTORY}"
+  GI_INVENTORY_JSON="$(cat "${GI_INVENTORY}")"
+  export GI_INVENTORY_JSON
 }
 
 gi_project_key() {
@@ -84,11 +92,18 @@ gi_jf_api() {
 
 gi_jf_request_json() {
   local method="$1" path="$2" body="$3"
-  local tmp
+  local tmp err out rc
   tmp="$(mktemp)"
+  err="$(mktemp)"
   printf '%s' "${body}" > "${tmp}"
-  gi_jf_api -X "${method}" -H "Content-Type: application/json" --input "${tmp}" "${path}"
-  local rc=$?
+  set +e
+  out="$(gi_jf_api -X "${method}" -H "Content-Type: application/json" --input "${tmp}" "${path}" 2>"${err}")"
+  rc=$?
+  set -e
   rm -f "${tmp}"
-  return "${rc}"
+  if [[ "${rc}" -ne 0 ]]; then
+    gi_die "jf api ${method} ${path} failed (exit ${rc}): $(tr -d '\n' <"${err}") ${out}"
+  fi
+  rm -f "${err}"
+  printf '%s' "${out}"
 }
