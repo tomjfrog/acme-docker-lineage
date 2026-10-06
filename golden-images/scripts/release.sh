@@ -147,7 +147,7 @@ release_to_prod() {
     --sync=true \
     --promotion-type=copy \
     --overwrite-strategy=disabled \
-    --include-repos="${DEV_REPO};${RELEASE_REPO}" \
+    --include-repos="${RELEASE_REPO}" \
     --server-id "${SERVER_ID}"
 }
 
