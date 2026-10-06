@@ -1,0 +1,29 @@
+{
+  "project_key": "golden-images",
+  "project_display_name": "Golden Image Management",
+  "repos": {
+    "upstream_remote": "golden-images-upstream-docker-remote",
+    "dev_local": "golden-images-dev-docker-local",
+    "release_local": "golden-images-release-docker-local"
+  },
+  "lifecycle": {
+    "promote_stages": ["DEV", "PROD"]
+  },
+  "evidence": {
+    "golden_certification_predicate": "https://acme.example/evidence/golden-image-certification/v1",
+    "slsa_provenance_predicate": "https://slsa.dev/provenance/v1",
+    "cyclonedx_sbom_predicate": "https://jfrog.com/evidence/cyclonedx/sbom/v1.6"
+  },
+  "applications": [
+    {
+      "application_key": "golden-alpine",
+      "application_name": "Golden Alpine Base",
+      "upstream_image_path": "library/alpine",
+      "image_name": "golden-alpine",
+      "build_name": "golden-images-alpine",
+      "dockerfile": "golden-images/alpine/Dockerfile",
+      "build_context": "golden-images/alpine",
+      "platforms": ["linux/amd64", "linux/arm64"]
+    }
+  ]
+}

@@ -12,7 +12,7 @@ Feed this file to a subagent that implements JFrog-branded slides. Do not invent
 | Length | **10 slides** (narrative + Q&A; do not exceed 11) |
 | Format | JFrog-branded deck (Google Slides from official template, or PPTX that matches the design system). Prefer the official Google Slides template copy workflow in the skill. |
 | Audience | **Customer-facing.** Platform, AppSec, and container owners who already understand Golden Images, rename, and lost `FROM`. |
-| Goal | Align on what JFrog can do **today**, walk the **tiered** path (Evidence + Build Info MVP → AppTrust), then answer **their questions** in their wording with a few lines each. |
+| Goal | Align on what JFrog can do **today**, walk the **tiered** path (Evidence + Build Info MVP → AppTrust Golden releases → child lineage gates), then answer **their questions** in their wording with a few lines each. |
 | Tone | Short. Honest. Advisory. No filler. No “journey,” “unlock,” or “empower.” |
 
 ### What this deck is not
@@ -21,7 +21,7 @@ The customer already knows the problem. **Do not** spend slides explaining what 
 
 ### One-line thesis
 
-Today, Golden Image lineage is a manual layer-diff exercise — Artifactory cannot report compliance. Capture provenance with Evidence and Build Info now; govern it with AppTrust later.
+Today, Golden Image lineage is a manual layer-diff exercise — Artifactory cannot report compliance. Capture provenance with Evidence and Build Info; govern **Golden base releases** with AppTrust Trusted Release; enforce **child** lineage on parent trust next.
 
 ### Phrases to keep (use verbatim where a slide specifies them)
 

@@ -1,5 +1,7 @@
 # Synthetic "purchased / approved" golden base for lineage lab.
-FROM alpine:3.20
+# Golden Image Management builds pass BASE_IMAGE digest-pinned; default preserves workflows 00–08.
+ARG BASE_IMAGE=alpine:3.20
+FROM ${BASE_IMAGE}
 
 LABEL org.opencontainers.image.title="acme-golden-base" \
       com.acme.image.role="golden-base" \

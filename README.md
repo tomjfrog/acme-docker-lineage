@@ -2,7 +2,9 @@
 
 Remotes: `origin` = full internal tree; `external` = stripped `public` branch (GitHub.com). Push `main` only to `origin`. Never merge `public` into `main`. To refresh GitHub.com: `git checkout public && git merge main`, re-`git rm` any restored spec/deck files, re-apply public README/FINDINGS tweaks if needed, then `git push external public:main`.
 
-Working notes and lab for **Golden Image lineage** on the JFrog Platform: what Artifactory can prove today (layer diffs), what to capture next (**Evidence** + **Build Info**), and how **AppTrust** can gate promote later.
+Working notes and lab for **Golden Image lineage** on the JFrog Platform: what Artifactory can prove today (layer diffs), what to capture next (**Evidence** + **Build Info**), and how **AppTrust** gates release.
+
+**Golden Image Management (AppTrust showcase):** see [golden-images/README.md](golden-images/README.md) and workflows `09` / `10` — one Application per base family, DEV → PROD Trusted Release. The lineage lab (`lab/`, workflows `00`–`08`) remains the forensic and child-lineage story.
 
 This is not a product that reports Golden Image compliance out of the box. The customer-facing answer is in [FINDINGS.md](FINDINGS.md). Slide copy lives in [DECK_SPEC.md](DECK_SPEC.md). The original ask is in [PROBLEM_STATEMENT.md](PROBLEM_STATEMENT.md) and [SPEC.md](SPEC.md).
 

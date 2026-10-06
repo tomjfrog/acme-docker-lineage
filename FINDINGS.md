@@ -546,7 +546,17 @@ Public JFrog docs for the capabilities in this recommendation. Share this list w
 | Query | Look up by package/digest after rename | [View Evidence](https://docs.jfrog.com/governance/docs/view-evidence), [Search for Evidence using GraphQL](https://docs.jfrog.com/governance/docs/search-for-evidence-using-graphql) |
 | GitHub attestations | Optional: GHA provenance into Evidence Collection | [GitHub attestation to JFrog Evidence](https://docs.jfrog.com/integrations/docs/github-actions-github-attestation-to-jfrog-evidence) |
 
-### AppTrust / Unified Policy (future — promote gates)
+### Golden Image Management (AppTrust — base catalog release)
+
+| Topic | Why it matters here | Doc |
+|---|---|---|
+| Isolated project + per-base Application | Golden team releases `golden-alpine@version` to PROD; Trusted Release is the consumer contract | [golden-images/README.md](golden-images/README.md) |
+| Release = PROD stage | Do not invent a separate “Release” stage; `version-release` targets PROD ([release docs](https://docs.jfrog.com/governance/docs/release-an-application-version.md)) | [Release Application Version CLI](https://docs.jfrog.com/governance/docs/release-application-version-cli.md) |
+| Build Info as sole AppVersion source | Avoids duplicate Docker package + build source conflicts | [Create Application Version CLI](https://docs.jfrog.com/governance/docs/create-application-version-cli.md) |
+
+Workflows: `09-golden-images-bootstrap.yml`, `10-release-golden-alpine.yml`. Child apps requiring parent Trusted Release evidence remain **next phase** (lineage lab `derived-from` story).
+
+### AppTrust / Unified Policy (lineage lab — derived app packages)
 
 | Topic | Why it matters here | Doc |
 |---|---|---|

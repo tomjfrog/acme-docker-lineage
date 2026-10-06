@@ -4,6 +4,39 @@ Dated notes for later agents. Newest entry first. Product/lineage facts belong i
 
 ---
 
+## 2026-09-10 — Throwaway CA layer, unique child tags, DiffID→AQL search
+
+Human asked whether a Golden CA `COPY` could be traced in descendants’ Build Info; then to implement a lab CA; unique GitHub run tags on children; then a full local arm64 walk from DiffID to Artifactory AQL (golden → payments-api → salestax-api). Product facts stay in `FINDINGS.md` (throwaway CA subsection) and [`LAYER_DIFF_SEARCH_PROCESS.md`](LAYER_DIFF_SEARCH_PROCESS.md).
+
+### What we did
+
+1. **Lab CA (not a real customer cert).** [`lab/golden/certs/gen-lab-ca.sh`](lab/golden/certs/gen-lab-ca.sh) mints a throwaway RSA CA. Commit **only** `acme-lab-root-ca.crt` + README + script. Key is `lab/golden/certs/private/` (gitignored). [`lab/golden/Dockerfile`](lab/golden/Dockerfile): dedicated `COPY` then `RUN update-ca-certificates`. Do **not** generate the cert in the Dockerfile (DiffID would change every rebuild). CN `Acme Lab Root CA (NOT FOR PRODUCTION)`.
+2. **Child tags include `github.run_number`.** Unique Docker tag `<stable>-<run>` (e.g. `payments-api:2.0.0-42`) plus **stable alias** (`2.0.0`) so 03 FROM / 04 copy / 06 detector stay catalog-native. Golden stays `1.0.0`. `lib.sh`: `UNIQUE_IMAGE_TAGS=1` only on publish step scripts; detector must **not** set it (06’s run number ≠ 02’s). Native 02/03/04 compute unique tags in `Set job env` and `build-push` both tags. OCI labels `com.acme.ci.github_run_number` / `github_run_id` on rebuilt children. Evidence predicates on 02/03 include `github_run_url`.
+3. **DiffID ≠ Artifactory blob.** `docker image inspect` has **no** `.Config.History`. Pair `docker history` (reverse non-empty) with `RootFS.Layers`. `imagetools inspect --raw` is usually an **index**; pick linux/arm64 (or amd64) image digest, skip `attestation-manifest`. Zip DiffIDs with `layers[].digest` (compressed). AQL field is **`sha256`**, not `actual_sha256` (400). Blob name `sha256__<hex>`. Ignore `path` `*/_uploads`.
+4. **Lab-validated arm64** (`golden-base:1.0.2` pushed by human; local children `2.0.0-ca-test` / `0.1.0-ca-test` FROM that Golden — **not** GHA `1.0.0`):
+   - CA `COPY` DiffID `sha256:5cca43ff6519f6b8126fe431125f266a1af44589620dd57782643c4def23765d`
+   - Compressed `e0fe12d1a5d59933bd16ee59ab3dc4746debb54b2ba7105c72f3b67e7a11fa3e`
+   - AQL `items.find` hit `golden-base/sha256:ddbcb479…`, `payments-api/sha256:1876bf6c…`, `salestax-api/sha256:42e72b12…` (plus `_uploads`).
+5. **Local rebuilds:** `--platform linux/arm64`, `--build-arg GOLDEN_IMAGE=…:1.0.2` / `BASE_IMAGE=…payments-api:2.0.0-ca-test`. Rancher: `export DOCKER_HOST=unix://${HOME}/.rd/docker.sock` **before** `jf docker push --build-name` or CLI hits `/var/run/docker.sock` and Build Info may omit layers even if `build-publish` succeeds. Item AQL still works (blob on the image).
+6. Docs: [`LAYER_DIFF_SEARCH_PROCESS.md`](LAYER_DIFF_SEARCH_PROCESS.md) (commands, output use, significance). FINDINGS throwaway-CA subsection. Inspect JSON under [`output-examples/`](output-examples/). [`PRESENTATION_SPEC.md`](PRESENTATION_SPEC.md) committed.
+
+### Do not
+
+- Do not search Artifactory for DiffIDs or PEM. Compressed `HEX` only.
+- Do not `paste` local DiffIDs onto a different tag/platform/index digest (row counts will disagree).
+- Do not default local `publish-payments-api.sh` for the CA trial (Golden `1.0.0` + Evidence keys). Use explicit `docker build` `--build-arg`.
+- Do not set `UNIQUE_IMAGE_TAGS=1` in 06 / `lib.sh` consumers that pull catalog aliases.
+- Do not treat `_uploads` as a descendant. Do not generate the CA inside the Dockerfile.
+- GHA 01 still publishes Golden as `1.0.0`; the arm64 CA `HEX` above is **`1.0.2`**. Republish 01 then 02/03 before expecting that blob on GHA children. linux/amd64 needs its own `HEX`.
+
+### Git this thread
+
+`origin` = `github.jfrog.info:tomj/acme-docker-image.git` (`main`). `external` = `github.com:tomjfrog/acme-docker-lineage.git` (`public` → `external/main`). Never merge `public` into `main`. Never push `main` to `external`. `AGENT_LOG.md` is internal (`origin/main`); strip it on the public merge if git restores it.
+
+Commits: `306368a` (lab CA), `64eac07` (unique child tags), `1b6aaed` (LAYER_DIFF_SEARCH_PROCESS + output-examples + PRESENTATION_SPEC). Empty `raw-logs.txt` left untracked.
+
+---
+
 ## 2026-09-08 — Native GHA for 04 rename (billing-service)
 
 Human asked to migrate **04** to the same named native Actions pattern as 01–03, including auth/env compatibility from those workflows.

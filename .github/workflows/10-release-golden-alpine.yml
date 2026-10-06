@@ -1,0 +1,234 @@
+name: 10 Release Golden Alpine
+
+on:
+  workflow_dispatch:
+    inputs:
+      application_key:
+        description: Catalog application key
+        required: true
+        default: golden-alpine
+      app_version:
+        description: Immutable Golden / AppTrust version (image tag)
+        required: true
+      upstream_tag:
+        description: Official library/alpine tag (e.g. 3.21.3)
+        required: true
+      upstream_digest:
+        description: sha256 digest of that tag on Docker Hub (64 hex chars, with sha256 prefix)
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+  attestations: write
+
+jobs:
+  build-and-scan:
+    runs-on: ubuntu-latest
+    env:
+      JF_URL: ${{ vars.JF_URL }}
+      JF_DOCKER_REGISTRY: ${{ vars.JF_DOCKER_REGISTRY }}
+      SERVER_ID: tomjpd2
+      APP_KEY: ${{ inputs.application_key }}
+      APP_VERSION: ${{ inputs.app_version }}
+      UPSTREAM_TAG: ${{ inputs.upstream_tag }}
+      UPSTREAM_DIGEST: ${{ inputs.upstream_digest }}
+    outputs:
+      index_digest: ${{ steps.build-and-push.outputs.digest }}
+      build_number: ${{ steps.set-env.outputs.build_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          ./golden-images/scripts/validate-config.sh "${APP_KEY}"
+          source ./golden-images/scripts/common.sh
+          gi_validate_sha256_digest "${UPSTREAM_DIGEST}"
+          gi_validate_version_string "${APP_VERSION}"
+          gi_require_upstream_path "${APP_KEY}" "library/alpine"
+
+      - name: Set build env
+        id: set-env
+        run: |
+          set -euo pipefail
+          source ./golden-images/scripts/common.sh
+          APP_JSON="$(gi_app_json "${APP_KEY}")"
+          IMAGE_NAME="$(jq -r '.image_name' <<<"${APP_JSON}")"
+          BUILD_NAME="$(jq -r '.build_name' <<<"${APP_JSON}")"
+          DEV_REPO="$(gi_repo dev_local)"
+          UPSTREAM_REPO="$(gi_repo upstream_remote)"
+          PROJECT_KEY="$(gi_project_key)"
+          BNUM="${GITHUB_RUN_NUMBER}-${APP_VERSION}"
+          IMAGE="${JF_DOCKER_REGISTRY}/${DEV_REPO}/${IMAGE_NAME}:${APP_VERSION}"
+          BASE="library/alpine:${UPSTREAM_TAG}@${UPSTREAM_DIGEST}"
+          {
+            echo "IMAGE_NAME=${IMAGE_NAME}"
+            echo "BUILD_NAME=${BUILD_NAME}"
+            echo "DEV_REPO=${DEV_REPO}"
+            echo "UPSTREAM_REPO=${UPSTREAM_REPO}"
+            echo "PROJECT_KEY=${PROJECT_KEY}"
+            echo "BUILD_NUM=${BNUM}"
+            echo "GOLDEN_IMAGE=${IMAGE}"
+            echo "BASE_IMAGE=${BASE}"
+          } >> "${GITHUB_ENV}"
+          echo "build_number=${BNUM}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Setup JFrog CLI (OIDC)
+        if: ${{ !env.ACT }}
+        id: setup-jfrog-cli
+        uses: jfrog/setup-jfrog-cli@v4
+        env:
+          JF_URL: ${{ env.JF_URL }}
+          JF_PROJECT: ${{ env.PROJECT_KEY }}
+        with:
+          version: 2.120.0
+          oidc-provider-name: ${{ secrets.OIDC_PROVIDER_NAME }}
+          custom-server-id: ${{ env.SERVER_ID }}
+
+      - name: Setup JFrog CLI (act)
+        if: ${{ env.ACT }}
+        uses: jfrog/setup-jfrog-cli@v4
+        env:
+          JF_URL: ${{ env.JF_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+          JF_PROJECT: ${{ env.PROJECT_KEY }}
+        with:
+          version: 2.120.0
+          custom-server-id: ${{ env.SERVER_ID }}
+
+      - name: Docker login (OIDC)
+        if: ${{ !env.ACT }}
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.JF_DOCKER_REGISTRY }}
+          username: ${{ steps.setup-jfrog-cli.outputs.oidc-user }}
+          password: ${{ steps.setup-jfrog-cli.outputs.oidc-token }}
+
+      - name: Docker login (act)
+        if: ${{ env.ACT }}
+        run: jf docker login "${JF_DOCKER_REGISTRY}" --server-id "${SERVER_ID}"
+
+      - name: Verify upstream digest via Artifactory remote
+        run: |
+          set -euo pipefail
+          REF="${JF_DOCKER_REGISTRY}/${UPSTREAM_REPO}/library/alpine:${UPSTREAM_TAG}"
+          docker pull "${REF}" || true
+          RESOLVED="$(docker buildx imagetools inspect "${REF}" --format '{{json .Manifest}}' 2>/dev/null | jq -r '.digest // empty' || true)"
+          if [[ -z "${RESOLVED}" ]]; then
+            echo "::warning::Could not resolve ${REF}; continuing with supplied digest (verify manually)"
+            exit 0
+          fi
+          if [[ "${RESOLVED}" != "${UPSTREAM_DIGEST}" ]]; then
+            echo "::error::Upstream tag ${UPSTREAM_TAG} resolves to ${RESOLVED}, expected ${UPSTREAM_DIGEST}"
+            exit 1
+          fi
+          echo "Upstream digest verified"
+
+      - name: Build and push Golden image (multi-arch)
+        id: build-and-push
+        uses: docker/build-push-action@v7
+        with:
+          context: golden-images/alpine
+          push: true
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            BASE_IMAGE=${{ env.BASE_IMAGE }}
+          tags: ${{ env.GOLDEN_IMAGE }}
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: oci://${{ env.JF_DOCKER_REGISTRY }}/${{ env.DEV_REPO }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build-and-push.outputs.digest }}
+
+      - name: Publish Build Info
+        run: |
+          set -euo pipefail
+          IMAGE_FILE="${RUNNER_TEMP}/golden-image-file.json"
+          jq -n --arg image "${GOLDEN_IMAGE}@${{ steps.build-and-push.outputs.digest }}" '{image: $image}' > "${IMAGE_FILE}"
+          jf rt build-docker-create "${DEV_REPO}" \
+            --image-file "${IMAGE_FILE}" \
+            --build-name "${BUILD_NAME}" \
+            --build-number "${BUILD_NUM}" \
+            --project="${PROJECT_KEY}" \
+            --server-id "${SERVER_ID}"
+          jf rt build-collect-env "${BUILD_NAME}" "${BUILD_NUM}" \
+            --project="${PROJECT_KEY}" --server-id "${SERVER_ID}"
+          jf rt build-publish "${BUILD_NAME}" "${BUILD_NUM}" \
+            --project="${PROJECT_KEY}" --server-id "${SERVER_ID}"
+
+      - name: Xray build scan (fail on Critical)
+        run: |
+          set -euo pipefail
+          jf build-scan --fail=true --format=json \
+            "${BUILD_NAME}" "${BUILD_NUM}" \
+            --project="${PROJECT_KEY}" --server-id "${SERVER_ID}"
+
+  certify-and-release:
+    needs: build-and-scan
+    runs-on: ubuntu-latest
+    env:
+      JF_URL: ${{ vars.JF_URL }}
+      JF_DOCKER_REGISTRY: ${{ vars.JF_DOCKER_REGISTRY }}
+      SERVER_ID: tomjpd2
+      APP_KEY: ${{ inputs.application_key }}
+      APP_VERSION: ${{ inputs.app_version }}
+      UPSTREAM_TAG: ${{ inputs.upstream_tag }}
+      UPSTREAM_DIGEST: ${{ inputs.upstream_digest }}
+      BUILD_NUMBER: ${{ needs.build-and-scan.outputs.build_number }}
+      INDEX_DIGEST: ${{ needs.build-and-scan.outputs.index_digest }}
+      REGISTRY_HOST: ${{ vars.JF_DOCKER_REGISTRY }}
+      KEY_ALIAS: acme-lineage-lab
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JFrog CLI (OIDC)
+        if: ${{ !env.ACT }}
+        uses: jfrog/setup-jfrog-cli@v4
+        env:
+          JF_URL: ${{ env.JF_URL }}
+        with:
+          version: 2.120.0
+          oidc-provider-name: ${{ secrets.OIDC_PROVIDER_NAME }}
+          custom-server-id: ${{ env.SERVER_ID }}
+
+      - name: Setup JFrog CLI (act)
+        if: ${{ env.ACT }}
+        uses: jfrog/setup-jfrog-cli@v4
+        env:
+          JF_URL: ${{ env.JF_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+        with:
+          version: 2.120.0
+          custom-server-id: ${{ env.SERVER_ID }}
+
+      - name: Docker login
+        run: jf docker login "${JF_DOCKER_REGISTRY}" --server-id "${SERVER_ID}"
+
+      - name: Write Evidence signing key
+        env:
+          EVIDENCE_SIGNING_KEY: ${{ secrets.EVIDENCE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          KEY_FILE="${RUNNER_TEMP}/evidence.key"
+          if [[ -z "${EVIDENCE_SIGNING_KEY}" ]]; then
+            echo "::error::EVIDENCE_SIGNING_KEY repository secret is required"
+            exit 1
+          fi
+          if printf '%s' "${EVIDENCE_SIGNING_KEY}" | grep -q "BEGIN"; then
+            printf '%s\n' "${EVIDENCE_SIGNING_KEY}" > "${KEY_FILE}"
+          else
+            printf '%s' "${EVIDENCE_SIGNING_KEY}" | base64 --decode > "${KEY_FILE}"
+          fi
+          chmod 600 "${KEY_FILE}"
+          echo "EVIDENCE_KEY_FILE=${KEY_FILE}" >> "${GITHUB_ENV}"
+
+      - name: Certify and release
+        run: ./golden-images/scripts/release.sh

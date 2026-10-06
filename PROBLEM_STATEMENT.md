@@ -4,4 +4,6 @@ That contract breaks as soon as teams rename, retag, or rebuild from an intermed
 
 The fix going forward is digest-pinned CI that always publishes Build Info and signed lineage Evidence, with AppTrust gates blocking promote unless that proof is present. Layer matching can inventory what is already stored; Evidence is the system of record; AppTrust is how you enforce it.
 
+**Golden Image catalog (platform team):** each approved base image is released as its own AppTrust Application Version under a Golden Image Management project (see `golden-images/`). PROD release with a passing Release gate yields a **Trusted Release** badge; application teams will gate child images on that parent trust in a later phase.
+
 Evidence is the signed lineage record attached at publish: this digest was built from that base digest, and (when CI records it) the root is a Golden Image. AppTrust consumes those records at promote. If derived-from-golden Evidence is present, the version can move; if it is missing—or only names an intermediate with no walk back to golden—the gate blocks. Evidence is the proof. AppTrust is the enforcement.
