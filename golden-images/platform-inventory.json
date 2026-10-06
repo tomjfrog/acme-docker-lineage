@@ -74,11 +74,12 @@
         },
         {
           "name": "golden-images-dev-repo-watch",
-          "description": "DEV docker local repo artifact scanning",
-          "resource_type": "repository",
-          "repository": "golden-images-dev-docker-local",
-          "repo_type": "local",
-          "bin_mgr_id": "default",
+          "description": "DEV docker local repo (project-scoped all-repos + name regex; named repository watches fail when Xray bin mgr has no repo entry)",
+          "resource_type": "all-repos",
+          "filters": [
+            { "type": "package-type", "value": "Docker" },
+            { "type": "regex", "value": "^golden-images-dev-docker-local$" }
+          ],
           "policies": ["golden-images-critical-cve-fail-build"],
           "channel": "jf_api",
           "mcp_alternative": null

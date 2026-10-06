@@ -300,17 +300,18 @@ ensure_xray_policy_and_watches() {
           --arg build_repo "${BUILD_INFO_REPO}" \
           '[{ type: "all-builds", bin_mgr_id: "default", build_repo: $build_repo }]')"
         ;;
+      all-repos)
+        local filters
+        filters="$(jq -c --argjson idx "${i}" \
+          '.provisioned_resources.xray.watches[$idx].filters // []' <<<"${GI_INVENTORY_JSON}")"
+        resources_json="$(jq -n --argjson filters "${filters}" \
+          'if ($filters | length) > 0
+            then [{ type: "all-repos", filters: $filters }]
+            else [{ type: "all-repos" }]
+            end')"
+        ;;
       repository)
-        resources_json="$(jq -n \
-          --arg repo "$(jq -r --argjson i "${i}" '.provisioned_resources.xray.watches[$i].repository' <<<"${GI_INVENTORY_JSON}")" \
-          --arg repo_type "$(jq -r --argjson i "${i}" '.provisioned_resources.xray.watches[$i].repo_type // "local"' <<<"${GI_INVENTORY_JSON}")" \
-          --arg bin_mgr "$(jq -r --argjson i "${i}" '.provisioned_resources.xray.watches[$i].bin_mgr_id // "default"' <<<"${GI_INVENTORY_JSON}")" \
-          '[{
-            type: "repository",
-            name: $repo,
-            repo_type: $repo_type,
-            bin_mgr_id: $bin_mgr
-          }]')"
+        gi_die "Xray watch resource_type repository is unsupported here (use all-repos + regex filter); see platform-inventory.json"
         ;;
       *)
         gi_die "unsupported xray watch resource_type in inventory: ${rtype}"
