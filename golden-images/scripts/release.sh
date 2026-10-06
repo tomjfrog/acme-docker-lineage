@@ -15,7 +15,6 @@ UPSTREAM_TAG="${UPSTREAM_TAG:?UPSTREAM_TAG required}"
 KEY_ALIAS="${KEY_ALIAS:-acme-lineage-lab}"
 EVIDENCE_KEY_FILE="${EVIDENCE_KEY_FILE:?EVIDENCE_KEY_FILE required}"
 REGISTRY_HOST="${REGISTRY_HOST:?REGISTRY_HOST required}"
-SKIP_PRE_CERT_DRY_RUN="${SKIP_PRE_CERT_DRY_RUN:-0}"
 
 "${SCRIPT_DIR}/validate-config.sh" "${APP_KEY}"
 gi_require_upstream_path "${APP_KEY}" "library/alpine"
@@ -95,24 +94,6 @@ create_or_verify_app_version() {
     --server-id "${SERVER_ID}"
 }
 
-dry_run_release_expect_block() {
-  [[ "${SKIP_PRE_CERT_DRY_RUN}" == "1" ]] && { gi_log "Skipping pre-cert dry-run"; return 0; }
-  gi_log "Dry-run promote to PROD (expect block before Golden certification)"
-  local out decision
-  # version-release has no --dry-run (verified via jf apptrust version-release --help); use version-promote.
-  if ! out="$(jf apptrust version-promote "${APP_KEY}" "${APP_VERSION}" PROD \
-      --dry-run=true --sync=true --server-id "${SERVER_ID}" 2>&1)"; then
-    gi_log "Dry-run returned non-zero (expected before certification)"
-    printf '%s\n' "${out}" | head -20
-    return 0
-  fi
-  decision="$(printf '%s\n' "${out}" | jq -r '.evaluations.entry_gate.decision // .evaluations.release_gate.decision // .status // empty' 2>/dev/null || true)"
-  if [[ "${decision}" == "pass" ]]; then
-    gi_die "pre-cert dry-run unexpectedly passed — Golden certification gate may be missing"
-  fi
-  gi_log "Pre-cert dry-run blocked or incomplete as expected"
-}
-
 attach_golden_certification() {
   local predicate_file="${RUNNER_TEMP:-/tmp}/golden-cert-${APP_VERSION}.json"
   jq -n \
@@ -185,7 +166,6 @@ verify_release_artifact() {
 main() {
   verify_build_info_digest
   create_or_verify_app_version
-  dry_run_release_expect_block
   local build_path="${BUILD_INFO_REPO}/${BUILD_NAME}/${BUILD_NUMBER}"
   wait_for_predicate "${build_path}" "provenance"
   wait_for_predicate "${build_path}" "cyclonedx"

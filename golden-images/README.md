@@ -58,7 +58,7 @@ Required dispatch inputs:
 Flow:
 
 1. **build-and-scan** — build from the trusted upstream tag, multi-arch push to DEV, Build Info publish, `jf build-scan --fail=false` (report vulnerabilities; policy skips non-applicable CVEs), GitHub provenance attestation (ingested by `setup-jfrog-cli` post-step).
-2. **certify-and-release** — AppVersion from **Build Info only**, pre-cert PROD promote dry-run (expects block), Golden certification evidence, `jf apptrust version-release` with copy to PROD, digest verification on `golden-images-release-docker-local`.
+2. **certify-and-release** — AppVersion from **Build Info only**, required evidence checks, Golden certification evidence, `jf apptrust version-release` with copy to PROD, release-gate enforcement, and digest verification on `golden-images-release-docker-local`.
 
 ## Tests
 
