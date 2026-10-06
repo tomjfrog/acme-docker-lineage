@@ -35,7 +35,7 @@ export SERVER_ID=tomjpd2
 Creates or reconciles:
 
 - Project `golden-images` and repos `golden-images-upstream-docker-remote`, `golden-images-dev-docker-local`, `golden-images-release-docker-local`
-- Lifecycle `DEV → PROD` (PROD is the AppTrust **release** stage; Trusted Release requires passing the Release gate)
+- Lifecycle promote path **`DEV`** only in `promote_stages` (global **`PROD`** is category **release**, not promote — Trusted Release via `version-release` after Release gate)
 - AppTrust application `golden-alpine`
 - Xray Critical **fail_build** policy + watch on DEV repo and project build `golden-images-alpine`
 - PROD Release policies for Golden certification, SLSA provenance, CycloneDX SBOM v1.6 (tenant rule templates discovered at bootstrap)

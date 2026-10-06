@@ -15,6 +15,10 @@ if [[ "$(printf '%s\n' ${keys} | sort | uniq -d | wc -l | tr -d ' ')" != "0" ]];
   gi_die "duplicate application_key in catalog"
 fi
 
+if jq -e '.lifecycle.promote_stages[]? | select(. == "PROD")' <<<"${GI_CATALOG_JSON}" >/dev/null 2>&1; then
+  gi_die "lifecycle.promote_stages must not include PROD (global release stage, not promote)"
+fi
+
 for key in upstream_remote dev_local release_local; do
   val="$(jq -r --arg k "${key}" '.repos[$k] // empty' <<<"${GI_CATALOG_JSON}")"
   [[ -n "${val}" ]] || gi_die "repos.${key} is required"

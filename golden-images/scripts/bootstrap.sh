@@ -125,10 +125,15 @@ assign_repo_environments() {
 
 ensure_lifecycle() {
   [[ "${DRY_RUN}" == "1" ]] && return 0
+  local stages_json
+  stages_json="$(jq -c '.lifecycle.promote_stages' <<<"${GI_CATALOG_JSON}")"
+  if jq -e '.[] | select(. == "PROD")' <<<"${stages_json}" >/dev/null 2>&1; then
+    gi_die "catalog lifecycle.promote_stages must not include PROD (release stage; use version-release)"
+  fi
   gi_jf_request_json PATCH "/access/api/v2/lifecycle/?project_key=${PROJECT_KEY}" \
-    "$(jq -n --arg pk "${PROJECT_KEY}" \
-      '{project_key: $pk, promote_stages: ["DEV", "PROD"]}')"
-  gi_log "Lifecycle promote_stages: DEV → PROD"
+    "$(jq -n --arg pk "${PROJECT_KEY}" --argjson stages "${stages_json}" \
+      '{project_key: $pk, promote_stages: $stages}')"
+  gi_log "Lifecycle promote_stages: $(jq -r '.lifecycle.promote_stages | join(" → ")' <<<"${GI_CATALOG_JSON}") (PROD = release stage / Trusted Release)"
 }
 
 ensure_app() {

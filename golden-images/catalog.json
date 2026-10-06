@@ -7,7 +7,7 @@
     "release_local": "golden-images-release-docker-local"
   },
   "lifecycle": {
-    "promote_stages": ["DEV", "PROD"]
+    "promote_stages": ["DEV"]
   },
   "evidence": {
     "golden_certification_predicate": "https://acme.example/evidence/golden-image-certification/v1",
