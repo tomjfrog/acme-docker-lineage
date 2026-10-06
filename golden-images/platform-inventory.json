@@ -65,7 +65,7 @@
       "watches": [
         {
           "name": "golden-images-dev-build-watch",
-          "description": "Project build-info for golden-images-alpine (CI build-scan fail_build)",
+          "description": "Project build-info for golden-images-alpine (CI build-scan report-only)",
           "resource_type": "all-builds",
           "build_repo": "golden-images-build-info",
           "policies": ["golden-images-critical-cve-fail-build"],

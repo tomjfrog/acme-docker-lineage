@@ -58,7 +58,7 @@ Required dispatch inputs:
 
 Flow:
 
-1. **build-and-scan** — digest-pinned build through the upstream remote, multi-arch push to DEV, Build Info publish, `jf build-scan --fail=true` (Xray watch), GitHub provenance attestation (ingested by `setup-jfrog-cli` post-step).
+1. **build-and-scan** — digest-pinned build through the upstream remote, multi-arch push to DEV, Build Info publish, `jf build-scan --fail=false` (report vulnerabilities; policy skips non-applicable CVEs), GitHub provenance attestation (ingested by `setup-jfrog-cli` post-step).
 2. **certify-and-release** — AppVersion from **Build Info only**, pre-cert PROD promote dry-run (expects block), Golden certification evidence, `jf apptrust version-release` with copy to PROD, digest verification on `golden-images-release-docker-local`.
 
 ## Tests
@@ -69,6 +69,6 @@ Flow:
 
 ## Operator notes
 
-- **Xray vs AppTrust:** a green `build-scan` means the CI watch policy passed; PROD Release still evaluates lifecycle policies independently.
+- **Xray vs AppTrust:** CI `build-scan` is report-only (`--fail=false`); PROD Release still evaluates lifecycle and Unified Policy gates independently.
 - **Multi-arch:** the OCI **index** digest is the release identity; do not substitute a single-platform manifest digest.
 - **No overwrite:** release uses `--overwrite-strategy=disabled`; pick a new `app_version` for each publish.

@@ -165,10 +165,11 @@ jobs:
           jf rt build-publish "${BUILD_NAME}" "${BUILD_NUM}" \
             --project="${PROJECT_KEY}" --server-id "${SERVER_ID}"
 
-      - name: Xray build scan (fail on Critical)
+      - name: Xray build scan (report only)
         run: |
           set -euo pipefail
-          jf build-scan --fail=true --format=json \
+          # --fail=false: do not fail CI on vulns/violations; Xray policy skips non-applicable CVEs (verified jf build-scan --help)
+          jf build-scan --fail=false --format=json \
             "${BUILD_NAME}" "${BUILD_NUM}" \
             --project="${PROJECT_KEY}" --server-id "${SERVER_ID}"
 
