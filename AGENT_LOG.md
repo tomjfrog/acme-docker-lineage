@@ -463,3 +463,22 @@ Use HTML docs URLs (`…/docs/slug`, not `llms.txt` or `.md` index URLs).
 - Re-crawl all of `docs.jfrog.com` to rebuild this list from scratch; start from FINDINGS and add only new capabilities.
 - Put the full link dump on slides or in the public-tree README (public still may link FINDINGS; it must not link DECK/SPEC/PROBLEM).
 - Treat Curation/CVS/SBOM docs as Golden Image lineage proof.
+
+---
+
+## 2026-10-06 — Golden Images bootstrap: commit pending skill updates
+
+While fixing workflow **09** / `golden-images/scripts/bootstrap.sh` (jf api shape, lifecycle `promote_stages`, AppTrust idempotency, Xray watch v2 JSON), several **local agent skills** under `~/.claude/skills/` were amended. Those edits are **not** in this repo until you copy or commit them from your skills source of truth.
+
+**TODO (Tom): commit/sync skills** — files touched in this session:
+
+| Skill | Changes (summary) |
+|---|---|
+| `jfrog/SKILL.md` | Bash bootstrap: `jf api` path last, `--input` not multiline `-d`; no `jf apptrust app-get` |
+| `jfrog-lifecycle-stages/SKILL.md` | Never put global `PROD` in `promote_stages`; GET-before-PATCH idempotency |
+| `jfrog-xray-policies-watches/SKILL.md` (→ v0.2.0) | Watch v2 `general_data` / `assigned_policies`; `all-repos` + filters vs `type: repository` bin-mgr 400 |
+| `jfrog-xray-policies-watches/references/templates.md` | Filtered `all-repos` example; invalid flat watch anti-pattern |
+| `jfrog-apptrust-gates/SKILL.md` (→ v0.2.0) | SaaS preflight via `/rules` not rule-templates; app GET + 409; skip-if-exists rules |
+| `create-jfrog-application/SKILL.md` | Idempotent bootstrap: GET application before `app-create` |
+
+Repo-side reminder only: `golden-images/README.md` (commit `8c6ee33`) points agents at these skills + `lab/scripts/03-apptrust-gate.sh`. Platform inventory: `golden-images/platform-inventory.json`.
