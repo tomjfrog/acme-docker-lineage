@@ -90,7 +90,9 @@
           "application_name": "Golden Alpine Base",
           "build_name": "golden-images-alpine",
           "channel": "jf_apptrust_cli",
-          "mcp_alternative": "apptrust_create_application"
+          "existence_check": "GET /apptrust/api/v1/applications/{application_key}",
+          "mcp_alternative": "apptrust_create_application",
+          "mcp_read": "apptrust_get_application_summary"
         }
       ],
       "unified_policy_rules": [

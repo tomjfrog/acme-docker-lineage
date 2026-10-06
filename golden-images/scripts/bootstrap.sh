@@ -137,19 +137,31 @@ ensure_lifecycle() {
   gi_log "Lifecycle promote_stages: $(jq -r '.lifecycle.promote_stages | join(" → ")' <<<"${GI_CATALOG_JSON}") (PROD = release stage / Trusted Release)"
 }
 
+app_exists() {
+  gi_jf_api "/apptrust/api/v1/applications/${APP_KEY}" >/dev/null 2>&1
+}
+
 ensure_app() {
-  if jf apptrust app-get "${APP_KEY}" --server-id "${SERVER_ID}" >/dev/null 2>&1; then
+  if app_exists; then
     gi_log "Application ${APP_KEY} exists"
     return 0
   fi
   [[ "${DRY_RUN}" == "1" ]] && { gi_log "DRY_RUN: would create app ${APP_KEY}"; return 0; }
-  jf apptrust app-create "${APP_KEY}" \
+  # app-get is not a jf subcommand (verified via jf apptrust --help); use REST for existence.
+  if jf apptrust app-create "${APP_KEY}" \
     --project="${PROJECT_KEY}" \
     --application-name="${APP_NAME}" \
     --desc="Golden base image application (${APP_KEY})" \
     --maturity-level=production \
     --business-criticality=high \
-    --server-id "${SERVER_ID}"
+    --server-id "${SERVER_ID}"; then
+    return 0
+  fi
+  if app_exists; then
+    gi_log "Application ${APP_KEY} exists (app-create returned conflict)"
+    return 0
+  fi
+  gi_die "failed to create AppTrust application ${APP_KEY}"
 }
 
 index_xray_repo() {
